@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:54303/glasses-preview.html)",
+      "Bash(cat vite.config.*)",
+      "Bash(ls vite.config.*)",
+      "Bash(python -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(node decode_shot.cjs)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const p='C:/Users/Black/.claude/projects/C--Users-Black-snapfilters/fb8a96af-c2aa-4d9c-98e8-618bca0cc0d1/tool-results/mcp-Claude_Preview-preview_eval-1780668669336.txt';const s=fs.readFileSync\\(p,'utf8'\\);console.log\\('len',s.length\\);console.log\\('head',JSON.stringify\\(s.slice\\(0,80\\)\\)\\);\")",
+      "Bash(node -e \"const b=require\\('fs'\\).readFileSync\\('public/models/sunglasses.glb'\\);console.log\\('bytes',b.length\\);console.log\\('magic',b.toString\\('ascii',0,4\\)\\);console.log\\('version',b.readUInt32LE\\(4\\)\\);\")",
+      "Bash(ls *.png)",
+      "Bash(node -e \"const fs=require\\('fs'\\);let o=JSON.parse\\(fs.readFileSync\\('C:/Users/Black/.claude/projects/C--Users-Black-snapfilters/fb8a96af-c2aa-4d9c-98e8-618bca0cc0d1/tool-results/mcp-Claude_Preview-preview_eval-1780674299434.txt','utf8'\\).trim\\(\\)\\);if\\(typeof o==='string'\\)o=JSON.parse\\(o\\);fs.writeFileSync\\('glb-fixed.png',Buffer.from\\(o.data.split\\(','\\)[1],'base64'\\)\\);console.log\\('OK'\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);let o=JSON.parse\\(fs.readFileSync\\('C:/Users/Black/.claude/projects/C--Users-Black-snapfilters/fb8a96af-c2aa-4d9c-98e8-618bca0cc0d1/tool-results/mcp-Claude_Preview-preview_eval-1780674609971.txt','utf8'\\).trim\\(\\)\\);if\\(typeof o==='string'\\)o=JSON.parse\\(o\\);fs.writeFileSync\\('glb-final.png',Buffer.from\\(o.data.split\\(','\\)[1],'base64'\\)\\);console.log\\('OK'\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);let o=JSON.parse\\(fs.readFileSync\\('C:/Users/Black/.claude/projects/C--Users-Black-snapfilters/fb8a96af-c2aa-4d9c-98e8-618bca0cc0d1/tool-results/mcp-Claude_Preview-preview_eval-1780678093648.txt','utf8'\\).trim\\(\\)\\);if\\(typeof o==='string'\\)o=JSON.parse\\(o\\);fs.writeFileSync\\('diag.png',Buffer.from\\(o.data.split\\(','\\)[1],'base64'\\)\\);console.log\\('OK'\\);\")",
+      "Bash(node -e \"const b=require\\('fs'\\).readFileSync\\('public/models/Party Glasses.glb'\\);console.log\\('magic',b.toString\\('ascii',0,4\\),'ver',b.readUInt32LE\\(4\\),'bytes',b.length\\)\")",
+      "Bash(node -e \"const b=require\\('fs'\\).readFileSync\\('public/models/Anon_Mask.glb'\\);console.log\\('magic',b.toString\\('ascii',0,4\\),'ver',b.readUInt32LE\\(4\\),'bytes',b.length\\)\")",
+      "Bash(git --version)"
+    ]
+  }
+}
