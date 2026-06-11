@@ -1,5 +1,10 @@
 import { DrawCtx } from '../DrawCtx';
 
+/**
+ * Dog — floppy ears, muzzle, nose, whiskers and a tongue whose shape is narrow
+ * at the top (where it leaves the mouth) and broadest at the bottom, ending in a
+ * wide rounded tip, with a full-length centre groove and fine vertical fibres.
+ */
 export function drawDog(d: DrawCtx) {
   const { ctx, s, angle } = d;
   const nose = d.pt(4);
@@ -300,103 +305,137 @@ export function drawDog(d: DrawCtx) {
     const anchorY = midY + (upperInner.y - midY) * lift;
 
     if (ext > 0.03) {
-      // Tongue dimensions — scale with both s and mouth openness
-      const tW   = s * (0.22 + 0.18 * ext);   // half-width at the wide top
-      const tLen = s * (0.28 + 0.48 * ext);    // length — only downward (positive y)
-      const cr   = tW * 0.22;                  // top corner radius
-      const bR   = tW * 0.80;                  // bottom semicircle radius
-      const bodyLen = tLen - bR;               // straight body length before arc
+      // INVERTED tongue dimensions — narrow neck at the top, broad bottom.
+      const botW = s * (0.23 + 0.17 * ext);   // half-width at the WIDE bottom
+      const topW = botW * 0.52;               // half-width at the narrow top
+      const tLen = s * (0.30 + 0.50 * ext);   // length — downward (positive y)
 
       ctx.save();
       ctx.translate(anchorX, anchorY);
       // The mirrored video makes `angle` ≈ π for an upright head, so this is what
       // orients the tongue to hang straight DOWN out of the mouth.
       ctx.rotate(angle + Math.PI);
+      // Nudge the whole tongue slightly UP (local −y) so its top sits higher in
+      // the mouth opening.
+      ctx.translate(0, -s * 0.05);
 
-      // ── Tongue shape:
-      //    - Rounded top corners (never goes above y=0)
-      //    - Sides bow out gently, taper toward bottom
-      //    - Full semicircle at the bottom for a smooth rounded tip
+      // ── Tongue shape (like the reference photo):
+      //    - Narrow rounded top (the neck leaving the mouth)
+      //    - Sides flare smoothly outward, widest near the bottom
+      //    - Broad, gently flattened rounded bottom tip
       const tonguePath = new Path2D();
-      tonguePath.moveTo(-tW, cr);
-      tonguePath.quadraticCurveTo(-tW, 0, -tW + cr, 0);   // top-left corner
-      tonguePath.lineTo(tW - cr, 0);
-      tonguePath.quadraticCurveTo(tW, 0, tW, cr);          // top-right corner
+      tonguePath.moveTo(-topW, topW * 0.5);
+      // narrow rounded top cap
+      tonguePath.quadraticCurveTo(0, -topW * 0.45, topW, topW * 0.5);
+      // right side flares out, reaching max width ~78% down
       tonguePath.bezierCurveTo(
-        tW * 1.06, tLen * 0.20,
-        bR,        bodyLen * 0.98,
-        bR,        bodyLen,
+        topW * 1.25, tLen * 0.30,
+        botW * 1.02, tLen * 0.52,
+        botW,        tLen * 0.78,
       );
-      tonguePath.arc(0, bodyLen, bR, 0, Math.PI, false);   // rounded tip
+      // broad rounded bottom (right → centre → left)
       tonguePath.bezierCurveTo(
-        -bR,        bodyLen * 0.98,
-        -tW * 1.06, tLen * 0.20,
-        -tW, cr,
+        botW * 0.98, tLen * 0.94,
+        botW * 0.50, tLen * 1.02,
+        0,           tLen * 1.02,
       );
+      tonguePath.bezierCurveTo(
+        -botW * 0.50, tLen * 1.02,
+        -botW * 0.98, tLen * 0.94,
+        -botW,        tLen * 0.78,
+      );
+      // left side back up to the narrow neck
+      tonguePath.bezierCurveTo(
+        -botW * 1.02, tLen * 0.52,
+        -topW * 1.25, tLen * 0.30,
+        -topW,        topW * 0.5,
+      );
+      tonguePath.closePath();
 
       // ── Clip and fill
       ctx.save();
       ctx.clip(tonguePath);
 
-      // Radial gradient: bright light pink at center, warm deeper pink at edges
-      const cg = ctx.createRadialGradient(
-        s * 0.02, tLen * 0.32, tW * 0.04,
-        s * 0.02, tLen * 0.32, tW * 1.35,
+      // Muted rosy red like the photo — darker at the narrow top knob,
+      // lighter dusty rose toward the broad bottom.
+      const lg = ctx.createLinearGradient(0, -topW * 0.5, 0, tLen * 1.02);
+      lg.addColorStop(0,    '#9E3A3C');
+      lg.addColorStop(0.18, '#B25052');
+      lg.addColorStop(0.55, '#C46A66');
+      lg.addColorStop(1,    '#B85C58');
+      ctx.fillStyle = lg;
+      ctx.fillRect(-botW * 1.15, -topW, botW * 2.3, tLen * 1.1 + topW);
+
+      // Soft centre sheen
+      const sheen = ctx.createRadialGradient(
+        0, tLen * 0.55, 0,
+        0, tLen * 0.55, botW * 1.1,
       );
-      cg.addColorStop(0,    '#F4B0C0');
-      cg.addColorStop(0.28, '#E88098');
-      cg.addColorStop(0.60, '#CE5878');
-      cg.addColorStop(1,    '#A83458');
-      ctx.fillStyle = cg;
-      ctx.fillRect(-tW * 1.15, 0, tW * 2.3, tLen + bR);
+      sheen.addColorStop(0, 'rgba(240,170,160,0.30)');
+      sheen.addColorStop(1, 'rgba(240,170,160,0)');
+      ctx.fillStyle = sheen;
+      ctx.fillRect(-botW * 1.15, 0, botW * 2.3, tLen * 1.1);
 
-      // Shadow at the mouth attachment (top)
-      const attachG = ctx.createLinearGradient(0, 0, 0, tLen * 0.30);
-      attachG.addColorStop(0, 'rgba(70,12,28,0.65)');
-      attachG.addColorStop(1, 'rgba(70,12,28,0)');
-      ctx.fillStyle = attachG;
-      ctx.fillRect(-tW, 0, tW * 2, tLen * 0.34);
+      // Edge shading so the sides roll away (darker rims like the photo)
+      const edgeL = ctx.createLinearGradient(-botW, 0, -botW * 0.45, 0);
+      edgeL.addColorStop(0, 'rgba(110,25,28,0.5)');
+      edgeL.addColorStop(1, 'rgba(110,25,28,0)');
+      ctx.fillStyle = edgeL;
+      ctx.fillRect(-botW * 1.1, 0, botW * 0.7, tLen * 1.1);
+      const edgeR = ctx.createLinearGradient(botW, 0, botW * 0.45, 0);
+      edgeR.addColorStop(0, 'rgba(110,25,28,0.5)');
+      edgeR.addColorStop(1, 'rgba(110,25,28,0)');
+      ctx.fillStyle = edgeR;
+      ctx.fillRect(botW * 0.4, 0, botW * 0.7, tLen * 1.1);
 
-      // Papillae — tiny round bumps covering the surface
-      for (let i = 0; i < 180; i++) {
+      // Fine VERTICAL muscle fibres (the photo's hair-like texture) — short
+      // downward strokes that follow the flare of the sides.
+      for (let i = 0; i < 240; i++) {
         const r1 = rnd(500 + i * 1.87);
         const r2 = rnd(600 + i * 2.31);
         const r3 = rnd(700 + i * 0.93);
-        const py = r2 * tLen * 1.02;
-        // Width of tongue at this y (tapers slightly toward bottom)
-        const wHere = tW * (1.0 - 0.38 * Math.min(1, py / tLen));
-        const px    = (r1 * 2 - 1) * wHere * 0.86;
-        const pr    = Math.max(0.4, s * 0.0055 * (0.7 + r3 * 0.6));
-        ctx.fillStyle = `rgba(155,35,65,${0.07 + r3 * 0.13})`;
+        const py = r2 * tLen * 0.96;
+        // local half-width: interpolate neck→bottom flare
+        const f  = Math.min(1, py / (tLen * 0.78));
+        const wHere = topW + (botW - topW) * (f * f * (3 - 2 * f)); // smoothstep
+        const px = (r1 * 2 - 1) * wHere * 0.92;
+        const len = s * (0.030 + r3 * 0.045);
+        // fibres lean outward slightly with the flare
+        const lean = (px / wHere) * len * 0.25;
+        const dark = r3 > 0.5;
+        ctx.strokeStyle = dark
+          ? `rgba(130,35,38,${0.10 + r3 * 0.16})`
+          : `rgba(235,160,150,${0.08 + r1 * 0.12})`;
+        ctx.lineWidth = Math.max(0.4, s * 0.006 * (0.5 + r2 * 0.7));
+        ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.arc(px, py, pr, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(px, py);
+        ctx.quadraticCurveTo(px + lean * 0.5, py + len * 0.5, px + lean, py + len);
+        ctx.stroke();
       }
 
-      // Wet highlights — two soft glints on upper portion
-      ctx.fillStyle = 'rgba(255,225,235,0.38)';
-      ctx.beginPath();
-      ctx.ellipse(-tW * 0.34, tLen * 0.26, tW * 0.18, tLen * 0.17, -0.14, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(tW * 0.30, tLen * 0.21, tW * 0.13, tLen * 0.12, 0.14, 0, Math.PI * 2);
-      ctx.fill();
+      // Shadow at the mouth attachment (top)
+      const attachG = ctx.createLinearGradient(0, -topW * 0.5, 0, tLen * 0.22);
+      attachG.addColorStop(0, 'rgba(60,10,14,0.6)');
+      attachG.addColorStop(1, 'rgba(60,10,14,0)');
+      ctx.fillStyle = attachG;
+      ctx.fillRect(-botW, -topW, botW * 2, tLen * 0.3 + topW);
 
       ctx.restore(); // end clip
 
-      // ── Center groove — dark line with a softer shadow halo
+      // ── Centre groove — full length, top to the bottom tip, like the photo
       ctx.lineCap = 'round';
-      ctx.strokeStyle = 'rgba(110,22,44,0.28)';
-      ctx.lineWidth   = s * 0.068;
+      ctx.strokeStyle = 'rgba(110,22,30,0.30)';
+      ctx.lineWidth   = s * 0.060;
       ctx.beginPath();
-      ctx.moveTo(0, cr);
-      ctx.quadraticCurveTo(0, tLen * 0.50, 0, bodyLen * 0.88);
+      ctx.moveTo(0, topW * 0.2);
+      ctx.lineTo(0, tLen * 0.99);
       ctx.stroke();
-      ctx.strokeStyle = 'rgba(95,15,35,0.92)';
-      ctx.lineWidth   = s * 0.026;
+      ctx.strokeStyle = 'rgba(90,16,22,0.85)';
+      ctx.lineWidth   = s * 0.020;
       ctx.beginPath();
-      ctx.moveTo(0, cr);
-      ctx.quadraticCurveTo(0, tLen * 0.50, 0, bodyLen * 0.90);
+      ctx.moveTo(0, topW * 0.2);
+      ctx.lineTo(0, tLen * 1.0);
       ctx.stroke();
 
       ctx.restore();
