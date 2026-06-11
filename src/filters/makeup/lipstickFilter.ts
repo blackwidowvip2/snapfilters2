@@ -93,17 +93,18 @@ function ensureLayers(W: number, H: number): boolean {
  */
 function smoothLandmarks(d: DrawCtx) {
   const n = IDX.length;
-  if (!smX || smX.length !== n) {
+  if (!smX || !smY || smX.length !== n) {
     smX = new Float32Array(n); smY = new Float32Array(n); smInit = false;
   }
+  const sx = smX, sy = smY;   // non-null locals
   const invS = 1 / d.s;
   for (let i = 0; i < n; i++) {
     const p = d.pt(IDX[i]);
-    if (!smInit) { smX[i] = p.x; smY[i] = p.y; continue; }
-    const speed = Math.hypot(p.x - smX[i], p.y - smY[i]) * invS;  // px moved per face-width
+    if (!smInit) { sx[i] = p.x; sy[i] = p.y; continue; }
+    const speed = Math.hypot(p.x - sx[i], p.y - sy[i]) * invS;  // px moved per face-width
     const a = Math.min(1, 0.4 + speed * 22);   // ~0.4 at rest → 1.0 once the lips move
-    smX[i] = smX[i] + (p.x - smX[i]) * a;       // keeps sub-pixel precision (no rounding)
-    smY[i] = smY[i] + (p.y - smY[i]) * a;
+    sx[i] = sx[i] + (p.x - sx[i]) * a;          // keeps sub-pixel precision (no rounding)
+    sy[i] = sy[i] + (p.y - sy[i]) * a;
   }
   smInit = true;
 }

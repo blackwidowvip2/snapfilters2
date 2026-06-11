@@ -117,14 +117,17 @@ export function pxCartoon(src: Uint8ClampedArray, W: number, H: number): ImageDa
 // frame size changes — avoids multi-MB allocations on every rendered frame.
 // The Kuwahara stage runs at HALF resolution (¼ the pixels) and is upscaled
 // back, which is ~4× faster than working at full res.
-let _wcW = 0, _wcH = 0, _wcHW = 0, _wcHH = 0;
+let _wcW = 0, _wcH = 0;
 let _wcDR: Float32Array, _wcDG: Float32Array, _wcDB: Float32Array;     // half-res downsample
 let _wcSatR: Float64Array, _wcSatG: Float64Array, _wcSatB: Float64Array;
 let _wcSatL: Float64Array, _wcSatL2: Float64Array;
 let _wcHOut: Float32Array;                                              // half-res simplified RGB
 let _wcTmp: Uint8ClampedArray;                                         // full-res copy for pass 2
 let _wcLuma: Float32Array;                                             // full-res luminance for edges
-let _wcOut: Uint8ClampedArray;                                        // cached full-res output
+// Initialised (not just typed) so TS infers an ArrayBuffer-backed array, which
+// the ImageData constructor requires (a bare `Uint8ClampedArray` annotation is
+// `<ArrayBufferLike>` in newer lib types and is rejected).
+let _wcOut = new Uint8ClampedArray(0);                                // cached full-res output
 let _wcResult: ImageData;                                             // cached ImageData wrapper
 let _wcFrame = 0;                                                     // frame counter for temporal reuse
 
@@ -156,7 +159,7 @@ export function pxWatercolor(src: Uint8ClampedArray, W: number, H: number): Imag
     _wcLuma=new Float32Array(W*H);
     _wcOut=new Uint8ClampedArray(src.length);
     _wcResult=new ImageData(_wcOut,W,H);
-    _wcW=W; _wcH=H; _wcHW=hw; _wcHH=hh;
+    _wcW=W; _wcH=H;
     _wcFrame=0;
   }
 
