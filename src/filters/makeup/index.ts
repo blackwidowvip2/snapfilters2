@@ -1,5 +1,7 @@
 import { DrawCtx } from '../DrawCtx';
 
+export { drawLipRed, drawLipPink } from './lipstickFilter';
+
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
 function drawEyeshadowBase(d: DrawCtx, color: string, alpha: number) {
@@ -89,14 +91,6 @@ function drawHighlighter(d: DrawCtx) {
 }
 
 // ── Exported filters ──────────────────────────────────────────────────────
-
-export function drawLipRed(d: DrawCtx) {
-  d.drawLipShape('#CC1010', 0.86, true);
-}
-
-export function drawLipPink(d: DrawCtx) {
-  d.drawLipShape('#E8609A', 0.82, true);
-}
 
 export function drawEyeshadowSmoky(d: DrawCtx) {
   const { ctx, s, angle } = d;

@@ -4,14 +4,23 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { useStore } from '../store/useStore';
 // createSunglasses() (procedural) is still available in ../filters/props/sunglasses
 // as a fallback if you ever want to render without the .glb asset.
-import { createSunglassesFromGLB, updateSunglasses, updateMask } from '../filters/props/sunglasses';
+import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder } from '../filters/props/sunglasses';
+import { createClownNose, createClownHair, updateClownNose, updateClownHair } from '../filters/props/clown';
+import type { LandmarkList } from '../types';
 
-// Three.js props and how each one tracks the face.
-// `glasses` → anchored on the nose bridge; `mask` → anchored on the face centre.
-const PROP_KIND: Record<string, 'glasses' | 'mask'> = {
-  sunglasses:    'glasses',
-  party_glasses: 'glasses',
-  anon_mask:     'mask',
+type Updater = (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number) => void;
+
+// Which Three.js prop instance(s) each filter shows. A filter may use several
+// (the clown wears both a wig and a nose).
+const FILTER_PROPS: Record<string, string[]> = {
+  sunglasses:    ['sunglasses'],
+  party_glasses: ['party_glasses'],
+  anon_mask:     ['anon_mask'],
+  anonymous_mask:['anonymous_mask'],
+  ironman:       ['ironman'],
+  batman2:       ['batman2'],
+  clown:         ['clown_hair', 'clown_nose'],
+  bunny:         ['bunny_ears'],
 };
 
 export function useThreeRenderer(
@@ -34,7 +43,10 @@ export function useThreeRenderer(
     if (!canvas) return;
 
     // ── Renderer ────────────────────────────────────────────────────────
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    // preserveDrawingBuffer keeps the rendered frame readable so the props can
+    // be composited into a captured photo (otherwise the buffer is cleared and
+    // drawImage(threeCanvas) yields nothing).
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -83,17 +95,65 @@ export function useThreeRenderer(
       sunglasses:    `${import.meta.env.BASE_URL}models/sunglasses.glb`,
       party_glasses: `${import.meta.env.BASE_URL}models/${encodeURIComponent('Party Glasses.glb')}`,
       anon_mask:     `${import.meta.env.BASE_URL}models/Anon_Mask.glb`,
+      anonymous_mask:`${import.meta.env.BASE_URL}models/Anonymous_mask.glb`,
+      ironman:       `${import.meta.env.BASE_URL}models/Ironman_Helmet.glb`,
+      batman2:       `${import.meta.env.BASE_URL}models/Batman_Cowl.glb`,
+      bunny_ears:    `${import.meta.env.BASE_URL}models/${encodeURIComponent('Bunny ears.glb')}`,
     };
+    // Factory + face-tracking updater for every prop instance type.
+    const makeProp: Record<string, () => THREE.Object3D> = {
+      sunglasses:    () => createSunglassesFromGLB(urls.sunglasses, { fit: 1.0, pivotZFront: true }),
+      party_glasses: () => createSunglassesFromGLB(urls.party_glasses, { fit: 1.0, pivotZFront: true }),
+      anon_mask:     () => createSunglassesFromGLB(urls.anon_mask, { fit: 1.0 }),
+      // Nudged down so the mask's eye holes land on the person's eyes.
+      anonymous_mask:() => createSunglassesFromGLB(urls.anonymous_mask, { fit: 1.0, hideNodes: ['Sphere'], offset: { y: -0.2 } }),
+      // Nudged down so the helmet's eye openings line up with the real eyes.
+      ironman:       () => createSunglassesFromGLB(urls.ironman, { fit: 1.2, offset: { y: 1.5 } }),
+      batman2:       () => createSunglassesFromGLB(urls.batman2, { fit: 1.3, offset: { y: 1.8 } }),
+      bunny_ears:    () => createSunglassesFromGLB(urls.bunny_ears, { fit: 1.0 }),
+      clown_nose:    createClownNose,
+      clown_hair:    createClownHair,
+    };
+    const updateProp: Record<string, Updater> = {
+      sunglasses:    updateSunglasses,
+      party_glasses: updateSunglasses,
+      anon_mask:     updateMask,
+      // This model turns opposite to the head with the standard yaw — invert it.
+      anonymous_mask:(p, lm, W, H) => { updateMask(p, lm, W, H); p.rotation.y = -p.rotation.y; },
+      ironman:       updateMask,
+      batman2:       updateMask,
+      bunny_ears:    updateBunnyEars,
+      clown_nose:    updateClownNose,
+      clown_hair:    updateClownHair,
+    };
+
     const props: Record<string, THREE.Object3D[]> = {};
-    for (const id of Object.keys(urls)) {
+    for (const id of Object.keys(makeProp)) {
       props[id] = [];
       for (let i = 0; i < POOL; i++) {
-        const inst = createSunglassesFromGLB(urls[id], { fit: 1.0 });
+        const inst = makeProp[id]();
         inst.visible = false;
         scene.add(inst);
         props[id].push(inst);
       }
     }
+
+    // ── Head occluders ──────────────────────────────────────────────────
+    // Invisible depth-only ellipsoids. Drawn first (renderOrder -1), they fill
+    // the depth buffer with the head's shape so prop parts behind the head are
+    // culled — this is what makes glasses sit ON the face instead of floating.
+    const occMat = new THREE.MeshBasicMaterial({ colorWrite: false });
+    const occGeo = new THREE.SphereGeometry(1, 24, 24);
+    const occluders: THREE.Mesh[] = [];
+    for (let i = 0; i < POOL; i++) {
+      const occ = new THREE.Mesh(occGeo, occMat);
+      occ.renderOrder = -1;
+      occ.visible = false;
+      scene.add(occ);
+      occluders.push(occ);
+    }
+    // Filters whose props wrap around the head and benefit from occlusion.
+    const NEEDS_OCCLUDER = new Set(['sunglasses', 'party_glasses']);
 
     // ── Camera (orthographic — sized to video) ──────────────────────────
     const initW = 640, initH = 480;
@@ -136,14 +196,28 @@ export function useThreeRenderer(
       for (const id of Object.keys(props)) {
         for (const inst of props[id]) inst.visible = false;
       }
+      for (const occ of occluders) occ.visible = false;
 
-      if (PROP_KIND[f] && props[f]) {
-        const pool = props[f];
-        const count = Math.min(faces.length, pool.length);
+      const propIds = FILTER_PROPS[f];
+      if (propIds) {
+        for (const id of propIds) {
+          const pool = props[id];
+          if (!pool) continue;
+          const update = updateProp[id];
+          const count = Math.min(faces.length, pool.length);
+          for (let i = 0; i < count; i++) {
+            update(pool[i], faces[i], vW, vH);
+            pool[i].visible = true;
+          }
+        }
+      }
+
+      // Place a head occluder on each face for filters that need it (glasses).
+      if (NEEDS_OCCLUDER.has(f)) {
+        const count = Math.min(faces.length, occluders.length);
         for (let i = 0; i < count; i++) {
-          if (PROP_KIND[f] === 'mask') updateMask(pool[i], faces[i], vW, vH);
-          else updateSunglasses(pool[i], faces[i], vW, vH);
-          pool[i].visible = true;
+          updateHeadOccluder(occluders[i], faces[i], vW, vH);
+          occluders[i].visible = true;
         }
       }
 
@@ -155,6 +229,8 @@ export function useThreeRenderer(
     return () => {
       cancelAnimationFrame(rafId);
       envTex?.dispose();
+      occGeo.dispose();
+      occMat.dispose();
       renderer.dispose();
     };
   }, [isLoaded, videoRef, threeCanvasRef]);

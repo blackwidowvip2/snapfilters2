@@ -2,6 +2,7 @@ import { DrawCtx } from './DrawCtx';
 import {
   pxNeon, pxGlitch, pxThermal, pxZombie, pxVampire, pxCyberpunk,
   pxNoir, pxCartoon, pxWatercolor, pxOilPaint, pxNightVision, pxHologram, pxInfrared,
+  pxMeltFace, pxPencilSketch, pxKaleidoscope,
 } from './pixelFilters';
 import { drawDog }   from './animal/dog';
 import { drawCat }   from './animal/cat';
@@ -9,8 +10,9 @@ import { drawBunny } from './animal/bunny';
 import { drawFox }   from './animal/fox';
 import { drawLion }  from './animal/lion';
 import { drawLipRed, drawLipPink, drawEyeshadowSmoky, drawEyeshadowGlam, drawFullGlam } from './makeup/index';
-import { drawVampire, drawZombie, drawDevil, drawAngel, drawAlien, drawAlienFace, drawBatCowl, pxBigEyes, pxBigMouth, pxAlienHead, pxVerticalScale, pxSlimFace, pxSwirlFace } from './character/index';
-import { drawNeonOverlay, drawCyberpunk, drawGold, drawCartoon, drawNoir, drawWatercolor, drawOilPaint, drawNightVision, drawHologram, drawInfrared } from './style/index';
+import { drawClown } from './makeup/clownFilter';
+import { drawVampire, drawZombie, drawDevil, drawAngel, drawAlien, drawAlienFace, drawBatCowl, pxBigEyes, pxBigMouth, pxWideLips, pxAlienHead, pxVerticalScale, pxSlimFace, pxSwirlFace, drawThirdEye } from './character/index';
+import { drawNeonOverlay, drawCyberpunk, drawGold, drawCartoon, drawNoir, drawWatercolor, drawOilPaint, drawNightVision, drawHologram, drawInfrared, drawNeonOutline } from './style/index';
 import type { LandmarkList } from '../types';
 
 // Filters that skip pixel processing (canvas overlay only)
@@ -18,6 +20,8 @@ const NO_PIXEL = new Set([
   'none','dog','cat','bunny','fox','lion',
   'lip_red','lip_pink','eyeshadow_smoky','eyeshadow_glam','full_glam',
   'vampire','devil','angel','alien','alien_face','bat_cowl',
+  'third_eye','clown',
+  'neon_outline',
   'gold',
   // Three.js props — handled separately
   'sunglasses','party_glasses','anon_mask',
@@ -44,8 +48,11 @@ export function applyPixelFilter(
       case 'watercolor':   out = pxWatercolor(id.data, W, H);     break;
       case 'oil_paint':    out = pxOilPaint(id.data, W, H);       break;
       case 'night_vision': out = pxNightVision(id.data, W, H);    break;
-      case 'hologram':     out = pxHologram(id.data, W, H);       break;
-      case 'infrared':     out = pxInfrared(id.data, W, H);       break;
+      case 'hologram':        out = pxHologram(id.data, W, H);          break;
+      case 'infrared':        out = pxInfrared(id.data, W, H);          break;
+      case 'melt_face':       out = pxMeltFace(id.data, W, H, t);       break;
+      case 'pencil_sketch':   out = pxPencilSketch(id.data, W, H);      break;
+      case 'kaleidoscope':    out = pxKaleidoscope(id.data, W, H);      break;
     }
     if (out) ctx.putImageData(out, 0, 0);
   } catch (_) { /* taint errors ignored */ }
@@ -60,10 +67,10 @@ export function applyOverlayFilter(
   if (filterId === 'none') return;
 
   // Pixel-only filters with no overlay
-  const PIXEL_ONLY = new Set(['glitch','thermal','watercolor','oil_paint','infrared']);
+  const PIXEL_ONLY = new Set(['glitch','thermal','watercolor','oil_paint','infrared','melt_face','pencil_sketch','kaleidoscope']);
   if (PIXEL_ONLY.has(filterId) && !landmarks) return;
 
-  const needsLandmarks = !new Set(['glitch','thermal']).has(filterId);
+  const needsLandmarks = !new Set(['glitch','thermal','melt_face','pencil_sketch','kaleidoscope']).has(filterId);
   if (needsLandmarks && !landmarks) return;
 
   const d = landmarks ? new DrawCtx(ctx, landmarks, W, H, t) : null;
@@ -86,9 +93,11 @@ export function applyOverlayFilter(
     case 'zombie':  d && drawZombie(d);  break;
     case 'devil':   d && drawDevil(d);   break;
     case 'angel':   d && drawAngel(d);   break;
-    case 'alien':      d && drawAlien(d);      break;
-    case 'alien_face': d && drawAlienFace(d);  break;
-    case 'bat_cowl':   d && drawBatCowl(d);    break;
+    case 'alien':         d && drawAlien(d);         break;
+    case 'alien_face':    d && drawAlienFace(d);     break;
+    case 'bat_cowl':      d && drawBatCowl(d);       break;
+    case 'third_eye':     d && drawThirdEye(d);      break;
+    case 'clown':         d && drawClown(d);         break;
     case 'big_eyes': {
       // Landmark-accurate big-eyes warp: re-apply with correct eye positions
       if (d) {
@@ -135,6 +144,25 @@ export function applyOverlayFilter(
         try {
           const id2 = ctx.getImageData(0, 0, W, H);
           const warped = pxBigMouth(id2.data, W, H, mc.x, mc.y, radius, 4.2);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'big_lips': {
+      // Wider lips, focused on the lip band. Anisotropic ellipse: rx wide so the
+      // lips grow outward sideways, ry short so the chin/nose are left alone.
+      if (d) {
+        const mc = d.mouthCenter();
+        const mL = d.pt(61), mR = d.pt(291);   // mouth corners
+        const up = d.pt(0),  lo = d.pt(17);    // upper-lip top, lower-lip bottom
+        const mouthW = Math.hypot(mR.x - mL.x, mR.y - mL.y);
+        const lipH   = Math.hypot(lo.x - up.x, lo.y - up.y);
+        const rx = mouthW * 1.45;              // lip corners sit inside the plateau
+        const ry = Math.max(lipH * 0.7, d.s * 0.075);
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxWideLips(id2.data, W, H, mc.x, mc.y, rx, ry, 7.0, 1.7);
           ctx.putImageData(warped, 0, 0);
         } catch (_) { /* taint guard */ }
       }
@@ -290,7 +318,8 @@ export function applyOverlayFilter(
       break;
     }
     // Style overlays
-    case 'neon':         d && drawNeonOverlay(d); break;
+    case 'neon':         d && drawNeonOverlay(d);  break;
+    case 'neon_outline': d && drawNeonOutline(d);  break;
     case 'cyberpunk':    d && drawCyberpunk(d);   break;
     case 'gold':         d && drawGold(d);        break;
     case 'cartoon':      d && drawCartoon(d);     break;

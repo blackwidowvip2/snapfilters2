@@ -169,17 +169,18 @@ export function drawNoir(d: DrawCtx) {
 
 // ── Akvarel ────────────────────────────────────────────────────────────────
 export function drawWatercolor(d: DrawCtx) {
-  const { ctx, s, t } = d;
-  const pts=[10,234,454,152,33,263,4,61,291,70,300,1];
-  const wcColors=['rgba(100,180,240,0.2)','rgba(240,120,160,0.18)','rgba(140,220,150,0.2)','rgba(255,200,80,0.16)','rgba(180,120,220,0.18)'];
-  pts.forEach((idx,si) => {
-    const p=d.pt(idx);
-    ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(t*0.1+si);
-    ctx.globalAlpha=0.6; ctx.fillStyle=wcColors[si%wcColors.length];
-    ctx.shadowColor=wcColors[si%wcColors.length]; ctx.shadowBlur=20;
-    ctx.beginPath(); ctx.ellipse(0,0,s*(0.24+d.pseudo(si*3.1)*0.18),s*(0.19+d.pseudo(si*7.7)*0.15),si*0.4,0,Math.PI*2); ctx.fill();
-    ctx.restore();
-  });
+  const { ctx } = d;
+  const W=d.W, H=d.H;
+  // A watercolour wash fades into the white paper toward the edges rather than
+  // filling the frame to a hard border. A soft paper-white vignette sells that.
+  ctx.save();
+  const g=ctx.createRadialGradient(W/2,H*0.46,Math.min(W,H)*0.34,W/2,H/2,Math.max(W,H)*0.6);
+  g.addColorStop(0,'rgba(255,255,253,0)');
+  g.addColorStop(0.7,'rgba(255,255,253,0.12)');
+  g.addColorStop(1,'rgba(255,255,253,0.6)');
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,W,H);
+  ctx.restore();
 }
 
 // ── Olie-maleri ────────────────────────────────────────────────────────────
@@ -260,6 +261,47 @@ export function drawHologram(d: DrawCtx) {
     ctx.fillStyle='#00EEFF'; ctx.shadowColor='#00EEFF'; ctx.shadowBlur=8;
     ctx.beginPath(); ctx.arc(px,py,s*0.012,0,Math.PI*2); ctx.fill(); ctx.restore();
   }
+}
+
+// ── Neon Outline ───────────────────────────────────────────────────────────
+export function drawNeonOutline(d: DrawCtx) {
+  const { ctx, s, t } = d;
+  const silhouette=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+  const features=[
+    [33,160,158,133,153,144,33],
+    [362,385,387,263,373,380,362],
+    [61,185,40,39,37,0,267,269,270,409,291,375,321,405,314,17,84,181,91,146,61],
+    [70,63,105,66,107],
+    [336,296,334,293,300],
+    [168,6,197,195,5,4,1],
+    [98,327,326,2,97],
+  ];
+  const hue=(t*38)%360;
+  const hue2=(hue+130)%360;
+
+  // Two passes: soft outer glow, then sharp inner line
+  ([
+    { blur:18, lw:s*0.03, alpha:0.45, lh:hue,  fh:hue2 },
+    { blur:6,  lw:s*0.012,alpha:0.92, lh:hue,  fh:hue2 },
+  ] as const).forEach(({ blur, lw, alpha, lh, fh: fh2 }) => {
+    ctx.save();
+    ctx.lineWidth=lw; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.globalAlpha=alpha;
+
+    ctx.strokeStyle=`hsl(${lh},100%,65%)`;
+    ctx.shadowColor=`hsl(${lh},100%,65%)`; ctx.shadowBlur=blur;
+    ctx.beginPath();
+    silhouette.forEach((idx,i) => { const p=d.pt(idx); i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y); });
+    ctx.closePath(); ctx.stroke();
+
+    ctx.strokeStyle=`hsl(${fh2},100%,68%)`;
+    ctx.shadowColor=`hsl(${fh2},100%,68%)`;
+    features.forEach(path => {
+      ctx.beginPath();
+      path.forEach((idx,i) => { const p=d.pt(idx); i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y); });
+      ctx.stroke();
+    });
+    ctx.restore();
+  });
 }
 
 // ── Infrared ───────────────────────────────────────────────────────────────

@@ -6,77 +6,9 @@ export function drawBunny(d: DrawCtx) {
   const lCheek = d.pt(234);
   const rCheek = d.pt(454);
 
-  // ── Reference landmarks for vertical placement ────────
-  // pt(10)  = top-centre of the forehead (highest face-mesh point)
-  // pt(152) = bottom of the chin
-  // The distance between them is the full face height; we use it (not `s`,
-  // which is only the small inter-ocular distance) to push the ears UP to
-  // the very top of the head.
-  const foreheadTop = d.pt(10);
-  const chin        = d.pt(152);
-  const faceHeight  = Math.hypot(chin.x - foreheadTop.x, chin.y - foreheadTop.y);
-
-  // Unit vector pointing "up" along the head (from chin toward forehead),
-  // so the ears track head tilt correctly.
-  const upX = (foreheadTop.x - chin.x) / faceHeight;
-  const upY = (foreheadTop.y - chin.y) / faceHeight;
-  // Perpendicular (points to the person's right in image space) for sideways spread.
-  const sideX = -upY;
-  const sideY =  upX;
-
-  // ── Tall upright ears, planted ON TOP of the head ─────
-  // Base of each ear = forehead-top, pushed further up by 0.30 of face height,
-  // and spread sideways by ±0.22 of face height.
-  [
-    { side: -1 as const },
-    { side:  1 as const },
-  ].forEach(({ side }) => {
-    const upOffset   = faceHeight * 0.30;   // above the forehead
-    const sideOffset = faceHeight * 0.22 * side;
-
-    const baseX = foreheadTop.x + upX * upOffset + sideX * sideOffset;
-    const baseY = foreheadTop.y + upY * upOffset + sideY * sideOffset;
-
-    ctx.save();
-    ctx.translate(baseX, baseY);
-    // Orient ear along head-up direction, plus a small outward lean.
-    ctx.rotate(angle + side * 0.20);
-
-    const earH = faceHeight * 0.62;   // tall ears
-    const earW = faceHeight * 0.11;   // half-width
-
-    // Outer ear (white fur)
-    const eg = ctx.createLinearGradient(-earW, 0, earW, 0);
-    eg.addColorStop(0,   '#EFE2EC');
-    eg.addColorStop(0.5, '#FFFFFF');
-    eg.addColorStop(1,   '#E2CFDD');
-    ctx.fillStyle = eg;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.bezierCurveTo(-earW, -earH * 0.18, -earW, -earH * 0.78, 0, -earH);
-    ctx.bezierCurveTo( earW, -earH * 0.78,  earW, -earH * 0.18, 0, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = '#D8BFD3';
-    ctx.lineWidth   = Math.max(1, faceHeight * 0.006);
-    ctx.stroke();
-
-    // Inner ear (pink)
-    const innerH = earH * 0.80;
-    const innerW = earW * 0.55;
-    const ig = ctx.createLinearGradient(0, -innerH, 0, -earH * 0.08);
-    ig.addColorStop(0, '#FFB6D4');
-    ig.addColorStop(1, '#FF7AAE');
-    ctx.fillStyle = ig;
-    ctx.beginPath();
-    ctx.moveTo(0, -earH * 0.10);
-    ctx.bezierCurveTo(-innerW, -earH * 0.22, -innerW, -innerH * 0.92, 0, -innerH);
-    ctx.bezierCurveTo( innerW, -innerH * 0.92,  innerW, -earH * 0.22, 0, -earH * 0.10);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-  });
+  // NOTE: the ears are no longer drawn here — they are rendered as a real 3D
+  // model ("Bunny ears.glb") on the Three.js layer (see filters/props/bunnyEars
+  // and useThreeRenderer). This function only paints the nose, whiskers and cheeks.
 
   // ── Replace nose (pink bunny nose) ────────────────────
   ctx.save();

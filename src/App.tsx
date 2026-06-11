@@ -40,19 +40,17 @@ const App: React.FC = () => {
       setTimeout(() => { flash.style.opacity = '0'; }, 100);
     }
 
-    // Snapshot: un-mirror the 2D canvas, then composite Three.js on top
+    // Snapshot exactly what is on screen: the 2D canvas is already mirrored
+    // (selfie view) in its pixels, and the Three.js props canvas is drawn on top
+    // un-flipped and aligned to it — so we composite both as-is, no extra flip.
     const snap = document.createElement('canvas');
     snap.width  = canvas.width;
     snap.height = canvas.height;
     const sc = snap.getContext('2d')!;
-    sc.scale(-1, 1);
-    sc.drawImage(canvas, -snap.width, 0);
-    sc.setTransform(1, 0, 0, 1, 0, 0); // reset transform
+    sc.drawImage(canvas, 0, 0);
     const threeCanvas = threeCanvasRef.current;
     if (threeCanvas && threeCanvas.width > 0) {
-      // Three.js canvas is already in correct (un-mirrored) orientation
-      sc.scale(-1, 1);
-      sc.drawImage(threeCanvas, -snap.width, 0);
+      sc.drawImage(threeCanvas, 0, 0, snap.width, snap.height);
     }
     setCapturedImage(snap.toDataURL('image/jpeg', 0.92));
   }, [setCapturedImage]);

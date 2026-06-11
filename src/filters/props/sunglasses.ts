@@ -187,6 +187,16 @@ export interface GlbOptions {
   fit?: number;
   /** Manual offset in model units (e.g. nudge down onto the nose). */
   offset?: { x?: number; y?: number; z?: number };
+  /** Node names to hide after load (e.g. cut-out eye rings so real eyes show). */
+  hideNodes?: string[];
+  /**
+   * Pivot on the FRONT of the model (max Z) instead of its bounding-box centre.
+   * For glasses the lenses sit at the front while the temple arms sweep far back,
+   * so the bbox centre is well behind the lenses. Pivoting there makes the lenses
+   * swing sideways when the head yaws. Pivoting at the front keeps the lenses on
+   * the eyes and lets the arms swing back, like real glasses.
+   */
+  pivotZFront?: boolean;
 }
 
 /**
@@ -198,8 +208,14 @@ export function createSunglassesFromGLB(url: string, opts: GlbOptions = {}): THR
   const root = new THREE.Group();
 
   // Dynamic import keeps GLTFLoader out of the main bundle until needed.
-  import('three/examples/jsm/loaders/GLTFLoader.js').then(({ GLTFLoader }) => {
+  Promise.all([
+    import('three/examples/jsm/loaders/GLTFLoader.js'),
+    import('three/examples/jsm/libs/meshopt_decoder.module.js'),
+  ]).then(([{ GLTFLoader }, { MeshoptDecoder }]) => {
     const loader = new GLTFLoader();
+    // Required for meshopt-compressed models (e.g. the optimised witch hat);
+    // harmless for models that don't use the extension.
+    loader.setMeshoptDecoder(MeshoptDecoder);
     loader.load(
       url,
       (gltf) => {
@@ -226,15 +242,20 @@ export function createSunglassesFromGLB(url: string, opts: GlbOptions = {}): THR
 
         // Re-centre AFTER scaling: world centre = position + s·centre, so to
         // land the centre at the desired offset we set position = offset − s·centre.
+        // For glasses, pivot on the FRONT (max Z) instead of the bbox centre so
+        // the lenses stay on the eyes when the head turns.
+        const pivotZ = opts.pivotZFront ? box.max.z : centre.z;
         model.position.set(
           (opts.offset?.x ?? 0) - centre.x * s,
           (opts.offset?.y ?? 0) - centre.y * s,
-          (opts.offset?.z ?? 0) - centre.z * s,
+          (opts.offset?.z ?? 0) - pivotZ * s,
         );
 
         // 3) Make sure every material reacts to the environment map so the
         //    lenses/metal reflect like the procedural version.
+        const hide = opts.hideNodes;
         model.traverse((o) => {
+          if (hide && hide.includes(o.name)) o.visible = false;
           const mesh = o as THREE.Mesh;
           if (mesh.isMesh) {
             const mat = mesh.material as THREE.MeshStandardMaterial;
@@ -299,13 +320,87 @@ export function updateSunglasses(
   // Pitch (nod) from nose tip vertical offset
   const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
 
-  // Sit on the nose bridge, pushed slightly toward the camera so the lenses
-  // float just in front of the eyes.
-  prop.position.set(bridge.x, bridge.y, bridge.z + eyeDist * 0.25);
-  prop.rotation.set(pitch * 0.5, -yaw * 0.55, roll);
+  // Lower the glasses from the bridge toward the nose tip so the nose pads (the
+  // two white pads at the centre of the lenses) rest ON the nose. Interpolating
+  // along bridge→nose keeps the drop aligned with the face when the head tilts.
+  const dropX = (noseTip.x - bridge.x) * 0.28;
+  const dropY = (noseTip.y - bridge.y) * 0.28;
 
-  // Map the model's reference width onto the measured face width.
-  prop.scale.setScalar(faceWidth / MODEL_REF_WIDTH);
+  // Lenses sit just in FRONT of the face so they clear the head occluder (see
+  // updateHeadOccluder) — the occluder then hides the temple arms / far lens that
+  // wrap behind the head, so the glasses read as sitting ON the face.
+  //
+  // A constant downward tilt (−0.28 rad on X) drops the BACK of the glasses so
+  // the temple ends fall to ear level. Because the pivot is at the lens plane,
+  // the lenses barely move while the far temple ends swing well down.
+  prop.position.set(bridge.x + dropX, bridge.y + dropY, bridge.z + eyeDist * 0.2);
+  prop.rotation.set(pitch * 0.5 - 0.28, yaw * 0.55, roll);
+
+  // Map the model's reference width onto the face width. Stretch ONLY the depth
+  // (Z) axis so the temple arms — which run backward from the lens-plane pivot —
+  // reach much further back, ending behind the ears, while the lenses keep size.
+  const sc = faceWidth / MODEL_REF_WIDTH;
+  prop.scale.set(sc, sc, sc * 2.6);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Head occluder — an invisible ellipsoid roughly the size of the head that
+//  writes only to the depth buffer. Props (e.g. glasses) that wrap behind the
+//  head fail the depth test against it and are hidden, so they sit ON the face
+//  instead of floating over it. Sized so the FRONT of the ellipsoid sits at the
+//  face surface (just behind the lenses), leaving the front of the glasses
+//  visible while the temple arms / far lens behind the head are culled.
+// ════════════════════════════════════════════════════════════════════════
+export function updateHeadOccluder(
+  prop: THREE.Object3D,
+  lm: LandmarkList,
+  W: number, H: number,
+): void {
+  const pt = (idx: number) => ({
+    x:  (1 - lm[idx].x) * W - W / 2,
+    y: -(lm[idx].y * H - H / 2),
+    z: -(lm[idx].z ?? 0) * W,
+  });
+
+  const lOuter = pt(33), lInner = pt(133);
+  const rOuter = pt(263), rInner = pt(362);
+  const lEye = { x: (lOuter.x + lInner.x) / 2, y: (lOuter.y + lInner.y) / 2 };
+  const rEye = { x: (rOuter.x + rInner.x) / 2, y: (rOuter.y + rInner.y) / 2 };
+  const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+  const eyeCx = (lEye.x + rEye.x) / 2, eyeCy = (lEye.y + rEye.y) / 2;
+
+  const cheekL = pt(234), cheekR = pt(454);
+  const faceWidth = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
+
+  const brow = pt(10), chin = pt(152);
+  const centre = {
+    x: (brow.x + chin.x) / 2,
+    y: (brow.y + chin.y) / 2,
+    z: (brow.z + chin.z) / 2,
+  };
+
+  let ex = lEye.x - rEye.x, ey = lEye.y - rEye.y;
+  if (ex < 0) { ex = -ex; ey = -ey; }
+  const roll = Math.atan2(ey, ex);
+
+  const noseTip = pt(1);
+  const yaw = (noseTip.x - eyeCx) / (eyeDist * 0.9);
+  const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
+
+  // Ellipsoid radii (base sphere has radius 1) — sized to the HEAD, not oversized.
+  // A tight, head-shaped occluder hides only what curves in behind the head/ear,
+  // leaving the visible run of the temples (lens → ear) in front of it on show.
+  const rx = faceWidth * 0.66;
+  const ry = faceWidth * 0.88;
+  const rz = faceWidth * 1.05;
+
+  // Put the ellipsoid's FRONT a little BEHIND the face centre, so only the rear
+  // of the temples (the part that wraps in behind the ear) falls behind the
+  // occluder and is hidden — the rest stays visible. Untilted: it represents the
+  // head, which doesn't tilt with the glasses.
+  prop.position.set(centre.x, centre.y, centre.z - rz - faceWidth * 0.18);
+  prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
+  prop.scale.set(rx, ry, rz);
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -356,6 +451,55 @@ export function updateMask(
 
   // Sit flush on the face (small forward offset so it clears the skin).
   prop.position.set(centre.x, centre.y, centre.z + eyeDist * 0.1);
-  prop.rotation.set(pitch * 0.5, -yaw * 0.55, roll);
+  prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
   prop.scale.setScalar(faceWidth / MODEL_REF_WIDTH);
 }
+
+// ════════════════════════════════════════════════════════════════════════
+//  Map MediaPipe landmarks → transform for ON-TOP-OF-HEAD props (bunny ears).
+//  Anchored above the forehead and lifted along the head-up axis so the ears
+//  stand on the crown and tilt with the head.
+// ════════════════════════════════════════════════════════════════════════
+export function updateBunnyEars(
+  prop: THREE.Object3D,
+  lm: LandmarkList,
+  W: number, H: number,
+): void {
+  const pt = (idx: number) => ({
+    x:  (1 - lm[idx].x) * W - W / 2,
+    y: -(lm[idx].y * H - H / 2),
+    z: -(lm[idx].z ?? 0) * W,
+  });
+
+  const lOuter = pt(33), lInner = pt(133);
+  const rOuter = pt(263), rInner = pt(362);
+  const lEye = { x: (lOuter.x + lInner.x) / 2, y: (lOuter.y + lInner.y) / 2 };
+  const rEye = { x: (rOuter.x + rInner.x) / 2, y: (rOuter.y + rInner.y) / 2 };
+  const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+  const eyeCx = (lEye.x + rEye.x) / 2, eyeCy = (lEye.y + rEye.y) / 2;
+
+  const cheekL = pt(234), cheekR = pt(454);
+  const faceWidth = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
+
+  // Head-up axis (chin → forehead), used to lift the ears onto the crown so
+  // they track head tilt.
+  const brow = pt(10), chin = pt(152);
+  const faceHeight = Math.hypot(brow.x - chin.x, brow.y - chin.y) || 1;
+  const ux = (brow.x - chin.x) / faceHeight;
+  const uy = (brow.y - chin.y) / faceHeight;
+
+  let ex = lEye.x - rEye.x, ey = lEye.y - rEye.y;
+  if (ex < 0) { ex = -ex; ey = -ey; }
+  const roll = Math.atan2(ey, ex);
+
+  const noseTip = pt(1);
+  const yaw = (noseTip.x - eyeCx) / (eyeDist * 0.9);
+  const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
+
+  // Plant the ears just above the forehead, lifted along the head-up axis.
+  const lift = faceHeight * 0.45;
+  prop.position.set(brow.x + ux * lift, brow.y + uy * lift, brow.z);
+  prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
+  prop.scale.setScalar(faceWidth / MODEL_REF_WIDTH);
+}
+

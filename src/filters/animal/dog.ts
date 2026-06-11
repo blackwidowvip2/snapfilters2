@@ -283,29 +283,35 @@ export function drawDog(d: DrawCtx) {
     // Anchor: interpolate 38% of the way from mouth-center to chin.
     // This places the root of the tongue solidly below the lip region
     // regardless of face scale, and well below the nose.
-    const mc    = d.mouthCenter();
-    const chinP = d.pt(152);
-    const anchorX = mc.x + (chinP.x - mc.x) * 0.38;
-    const anchorY = mc.y + (chinP.y - mc.y) * 0.38;
-
-    // Mouth openness
+    // Mouth openness.
     const upperInner = d.pt(13);
     const lowerInner = d.pt(14);
     const openPx  = Math.hypot(lowerInner.x - upperInner.x, lowerInner.y - upperInner.y);
     const openNorm = openPx / s;
     const ext      = Math.max(0, Math.min(1, (openNorm - 0.05) / 0.32));
 
+    // Start at the centre of the opening (inner-lip midpoint). The WIDER the mouth,
+    // the more we lift the start toward the upper lip, so it doesn't sink too low
+    // when the jaw drops far — a gradual upward shift with openness.
+    const midX = (upperInner.x + lowerInner.x) / 2;
+    const midY = (upperInner.y + lowerInner.y) / 2;
+    const lift = ext * 0.55;   // 0 when barely open → toward the upper lip when wide
+    const anchorX = midX + (upperInner.x - midX) * lift;
+    const anchorY = midY + (upperInner.y - midY) * lift;
+
     if (ext > 0.03) {
       // Tongue dimensions — scale with both s and mouth openness
-      const tW   = s * (0.22 + 0.26 * ext);   // half-width at the wide top
-      const tLen = s * (0.28 + 0.68 * ext);    // length — only downward (positive y)
+      const tW   = s * (0.22 + 0.18 * ext);   // half-width at the wide top
+      const tLen = s * (0.28 + 0.48 * ext);    // length — only downward (positive y)
       const cr   = tW * 0.22;                  // top corner radius
       const bR   = tW * 0.80;                  // bottom semicircle radius
       const bodyLen = tLen - bR;               // straight body length before arc
 
       ctx.save();
       ctx.translate(anchorX, anchorY);
-      ctx.rotate(angle);
+      // The mirrored video makes `angle` ≈ π for an upright head, so this is what
+      // orients the tongue to hang straight DOWN out of the mouth.
+      ctx.rotate(angle + Math.PI);
 
       // ── Tongue shape:
       //    - Rounded top corners (never goes above y=0)

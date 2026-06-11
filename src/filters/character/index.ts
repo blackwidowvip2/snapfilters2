@@ -1,12 +1,14 @@
 import { DrawCtx } from '../DrawCtx';
-export { drawAlienFace } from './alienFaceFilter';
-export { drawBatCowl }   from './batCowlMaskFilter';
-export { pxBigEyes }     from './bigEyesFilter';
-export { pxBigMouth }    from './bigMouthFilter';
-export { pxAlienHead }   from './alienHeadFilter';
-export { pxVerticalScale } from './verticalWarpFilter';
-export { pxSlimFace }    from './slimFaceFilter';
-export { pxSwirlFace }   from './swirlFaceFilter';
+export { drawAlienFace }    from './alienFaceFilter';
+export { drawBatCowl }      from './batCowlMaskFilter';
+export { pxBigEyes }        from './bigEyesFilter';
+export { pxBigMouth }       from './bigMouthFilter';
+export { pxWideLips }       from './lipWarpFilter';
+export { pxAlienHead }      from './alienHeadFilter';
+export { pxVerticalScale }  from './verticalWarpFilter';
+export { pxSlimFace }       from './slimFaceFilter';
+export { pxSwirlFace }      from './swirlFaceFilter';
+export { drawThirdEye }     from './thirdEyeFilter';
 
 // ── Vampire ────────────────────────────────────────────────────────────────
 export function drawVampire(d: DrawCtx) {

@@ -31,8 +31,13 @@ export const FILTERS: FilterDefinition[] = [
   { id:'alien',            label:'Alien',        icon:'👽', category:'character', description:'Store sorte øjne og glød' },
   { id:'alien_face',      label:'Alien Ansigt', icon:'🛸', category:'character', description:'Lysende mandelformede øjne og bioluminescens' },
   { id:'bat_cowl',        label:'Batman',       icon:'🦇', category:'character', description:'Mørk cowl med spidse ører og hvide linser' },
+  { id:'batman2',         label:'Batman 2',     icon:'🦇', category:'character', description:'3D Batman-cowl' },
+  { id:'third_eye',       label:'Tredje Øje',   icon:'👁️', category:'character', description:'Mystisk lilla øje åbner sig på panden' },
+  { id:'clown',           label:'Klovn',        icon:'🤡', category:'character', description:'Hvidt ansigt, røde kinder, stor rød mund, 3D-næse og krøllet regnbuehår' },
   // Style
   { id:'neon',             label:'Neon',         icon:'⚡', category:'style',    description:'Farverige kantlinjer på mørk baggrund' },
+  { id:'neon_outline',    label:'Neon Kontur',  icon:'🌈', category:'style',    description:'Glødende neon-kontur langs ansigtslandmarks' },
+  { id:'pencil_sketch',   label:'Blyantskitse', icon:'✏️', category:'style',    description:'Hvid baggrund med mørke blyantstreger' },
   { id:'cyberpunk',        label:'Cyberpunk',    icon:'🤖', category:'style',    description:'HUD-ringe, kredsløb og scanning' },
   { id:'gold',             label:'Guld',         icon:'🏆', category:'style',    description:'Guldpartikler og metallic makeup' },
   { id:'cartoon',          label:'Tegneserie',   icon:'🎨', category:'style',    description:'Fed omrids og halvtone-rødme' },
@@ -41,6 +46,7 @@ export const FILTERS: FilterDefinition[] = [
   { id:'oil_paint',        label:'Olie-maleri',  icon:'🖼️', category:'style',   description:'Malet penselstrøg og rige farver' },
   // Effect
   { id:'glitch',           label:'Glitch',       icon:'📺', category:'effect',   description:'RGB-kanal split og støj' },
+  { id:'kaleidoscope',     label:'Kaleidoskop',  icon:'🔮', category:'effect',   description:'Ansigtet spejles i 4-vejs kaleidoskop-mønster' },
   { id:'thermal',          label:'Termisk',      icon:'🌡️', category:'effect',  description:'Infrarød varmekort-palet' },
   { id:'night_vision',     label:'Nattesyn',     icon:'🌙', category:'effect',   description:'Grøn nattesyn med crosshair' },
   { id:'hologram',         label:'Hologram',     icon:'💠', category:'effect',   description:'Cyan holografisk overlay' },
@@ -49,19 +55,23 @@ export const FILTERS: FilterDefinition[] = [
   { id:'sunglasses',       label:'Solbriller',   icon:'🕶️', category:'props',    description:'3D solbriller med glas-refleksion' },
   { id:'party_glasses',    label:'Party Briller', icon:'🥳', category:'props',    description:'3D party-briller' },
   { id:'anon_mask',        label:'Anon Maske',    icon:'🎭', category:'props',    description:'3D anonymous-maske' },
+  { id:'anonymous_mask',   label:'Anonymous',     icon:'👤', category:'props',    description:'3D Anonymous / Guy Fawkes-maske' },
+  { id:'ironman',          label:'Iron Man',      icon:'🤖', category:'props',    description:'3D Iron Man-hjelm' },
   // Distortion (image warps)
   { id:'big_mouth',       label:'Stor Mund',    icon:'👄', category:'distortion', description:'Munden forstørres kraftigt' },
   { id:'huge_mouth',      label:'Ekstra Stor Mund', icon:'😮', category:'distortion', description:'Munden forstørres ekstremt (75% mere end Stor Mund)' },
+  { id:'big_lips',        label:'Store Læber',  icon:'💋', category:'distortion', description:'Læberne forstørres til dobbelt størrelse' },
   { id:'big_nose',        label:'Stor Næse',    icon:'👃', category:'distortion', description:'Næsen forstørres kraftigt' },
   { id:'big_ears',        label:'Store Ører',   icon:'👂', category:'distortion', description:'Ørerne forstørres' },
+  { id:'big_eyes',        label:'Store Øjne',   icon:'👀', category:'distortion', description:'Forstørrede øjne via billedwarp' },
+  { id:'big_eyes_mouth',  label:'Øjne + Mund',  icon:'🤡', category:'distortion', description:'Store øjne og stor mund kombineret' },
+  { id:'long_forehead',   label:'Lang Pande',   icon:'🥚', category:'distortion', description:'Panden bliver dobbelt så lang' },
   { id:'alien_head',      label:'Alien Hoved',  icon:'🛸', category:'distortion', description:'Hovedet smalner mod hagen som en alien' },
   { id:'compress_lower',  label:'Komprimer Nederste', icon:'⬇️', category:'distortion', description:'Nederste del af ansigtet komprimeres' },
   { id:'compress_upper',  label:'Komprimer Øverste',  icon:'⬆️', category:'distortion', description:'Øverste del af ansigtet komprimeres' },
-  { id:'long_forehead',   label:'Lang Pande',   icon:'🥚', category:'distortion', description:'Panden bliver dobbelt så lang' },
-  { id:'big_eyes_mouth',  label:'Øjne + Mund',  icon:'🤡', category:'distortion', description:'Store øjne og stor mund kombineret' },
-  { id:'big_eyes',        label:'Store Øjne',   icon:'👀', category:'distortion', description:'Forstørrede øjne via billedwarp' },
   { id:'slim_face',       label:'Smalt Ansigt', icon:'💆', category:'distortion', description:'Slankt ansigt via pixel-kontrahering' },
   { id:'swirl_face',      label:'Hvirvel',      icon:'🌀', category:'distortion', description:'Hvirvlende ansigtswarp' },
+  { id:'melt_face',       label:'Smeltet Ansigt', icon:'🫠', category:'distortion', description:'Ansigtet smelter ned med dryppende warp-effekt' },
 ];
 
 export const ALL_FILTERS: FilterDefinition[] = [
