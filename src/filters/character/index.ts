@@ -1,6 +1,5 @@
 import { DrawCtx } from '../DrawCtx';
 export { drawAlienFace }    from './alienFaceFilter';
-export { drawBatCowl }      from './batCowlMaskFilter';
 export { pxBigEyes }        from './bigEyesFilter';
 export { pxBigMouth }       from './bigMouthFilter';
 export { pxWideLips }       from './lipWarpFilter';

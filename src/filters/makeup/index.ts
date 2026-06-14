@@ -94,15 +94,55 @@ function drawHighlighter(d: DrawCtx) {
 
 export function drawEyeshadowSmoky(d: DrawCtx) {
   const { ctx, s, angle } = d;
-  (['left','right'] as const).forEach(side => {
+  (['left','right'] as const).forEach((side, ei) => {
     const eye = d.eyeCenter(side);
-    ctx.save(); ctx.translate(eye.x,eye.y); ctx.rotate(angle);
-    const g = ctx.createRadialGradient(0,0,0,0,0,s*0.2);
-    g.addColorStop(0,'rgba(0,0,0,0.6)'); g.addColorStop(0.6,'rgba(20,10,30,0.3)'); g.addColorStop(1,'transparent');
-    ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(0,-s*0.008,s*0.2,s*0.13,0,0,Math.PI*2); ctx.fill(); ctx.restore();
-    d.drawLashes(eye, side==='left'?-1:1,'#000',1.1);
+    // The mirrored video makes `angle` ≈ π for an upright head, so `angle + π`
+    // gives an UPRIGHT local frame (−y = up). Everything below is authored in
+    // that frame, so the smoky eye sits on the UPPER lid, the right way up.
+    const out = ei === 0 ? 1 : -1;   // outward (toward the outer corner) in this frame
+    ctx.save();
+    ctx.translate(eye.x, eye.y);
+    ctx.rotate(angle + Math.PI);
+
+    // Smoky shadow, heaviest on the upper lid (−y).
+    const g = ctx.createRadialGradient(0, -s * 0.03, 0, 0, -s * 0.03, s * 0.2);
+    g.addColorStop(0, 'rgba(0,0,0,0.6)');
+    g.addColorStop(0.6, 'rgba(20,10,30,0.3)');
+    g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, -s * 0.03, s * 0.2, s * 0.13, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyeliner along the upper lash line + a flick at the outer corner.
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = s * 0.02;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.1, Math.PI + 0.2, -0.2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(out * s * 0.1, -s * 0.01);
+    ctx.lineTo(out * s * 0.17, -s * 0.068);
+    ctx.stroke();
+
+    // Upper lashes, fanning up and out toward the outer corner.
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = s * 0.013;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 3;
+    for (let k = -5; k <= 5; k++) {
+      const bx = k * s * 0.022;
+      const by = -s * 0.085;
+      const a = (k / 5) * 0.35 * out;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.sin(a) * s * 0.06, by - Math.cos(a) * s * 0.06);
+      ctx.stroke();
+    }
+    ctx.restore();
   });
-  drawEyeliner(d,'#111',true);
 }
 
 export function drawEyeshadowGlam(d: DrawCtx) {

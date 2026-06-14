@@ -26,7 +26,15 @@
       "Bash(npx --yes @gltf-transform/cli@latest weld witch_hat.glb _wh1.glb --tolerance 0.001)",
       "Bash(rm -f _whg.glb)",
       "Bash(npx --yes gltfpack -i witch_hat.glb -o _whg.glb -si 0.06 -cc)",
-      "Bash(node -e 'const fs=require\\(\"fs\"\\);const b=fs.readFileSync\\(\"_whg.glb\"\\);const jl=b.readUInt32LE\\(12\\);const json=JSON.parse\\(b.slice\\(20,20+jl\\).toString\\(\"utf8\"\\)\\);console.log\\(\"extReq:\",json.extensionsRequired||[]\\);let t=0;json.meshes.forEach\\(m=>m.primitives.forEach\\(p=>t+=json.accessors[p.attributes.POSITION].count\\)\\);console.log\\(\"verts:\",t\\);')"
+      "Bash(node -e 'const fs=require\\(\"fs\"\\);const b=fs.readFileSync\\(\"_whg.glb\"\\);const jl=b.readUInt32LE\\(12\\);const json=JSON.parse\\(b.slice\\(20,20+jl\\).toString\\(\"utf8\"\\)\\);console.log\\(\"extReq:\",json.extensionsRequired||[]\\);let t=0;json.meshes.forEach\\(m=>m.primitives.forEach\\(p=>t+=json.accessors[p.attributes.POSITION].count\\)\\);console.log\\(\"verts:\",t\\);')",
+      "Bash(awk '{print $5}')",
+      "Read(//c/Users/Black/Desktop/**)",
+      "Bash(awk '{print $5, $NF}')",
+      "Bash(node tools/agf/build_logo.mjs)",
+      "Bash(powershell -NoProfile -Command 'Get-NetTCPConnection -LocalPort 7777 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }')",
+      "Read(//c/Users/Black/Downloads/**)",
+      "Bash(node tools/agf/measure.mjs)",
+      "Bash(SKIP_SIMPLIFY=1 node tools/agf/build_logo.mjs)"
     ]
   }
 }

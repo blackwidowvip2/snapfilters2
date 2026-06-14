@@ -2,7 +2,7 @@ import { DrawCtx } from './DrawCtx';
 import {
   pxNeon, pxGlitch, pxThermal, pxZombie, pxVampire, pxCyberpunk,
   pxNoir, pxCartoon, pxWatercolor, pxOilPaint, pxNightVision, pxHologram, pxInfrared,
-  pxMeltFace, pxPencilSketch, pxKaleidoscope,
+  pxMeltFace, pxPencilSketch, pxKaleidoscope, pxBlack,
 } from './pixelFilters';
 import { drawDog }   from './animal/dog';
 import { drawCat }   from './animal/cat';
@@ -11,7 +11,8 @@ import { drawFox }   from './animal/fox';
 import { drawLion }  from './animal/lion';
 import { drawLipRed, drawLipPink, drawEyeshadowSmoky, drawEyeshadowGlam, drawFullGlam } from './makeup/index';
 import { drawClown } from './makeup/clownFilter';
-import { drawVampire, drawZombie, drawDevil, drawAngel, drawAlien, drawAlienFace, drawBatCowl, pxBigEyes, pxBigMouth, pxWideLips, pxAlienHead, pxVerticalScale, pxSlimFace, pxSwirlFace, drawThirdEye } from './character/index';
+import { drawAgfFan } from './props/agfFan';
+import { drawVampire, drawZombie, drawDevil, drawAngel, drawAlien, drawAlienFace, pxBigEyes, pxBigMouth, pxWideLips, pxAlienHead, pxVerticalScale, pxSlimFace, pxSwirlFace, drawThirdEye } from './character/index';
 import { drawNeonOverlay, drawCyberpunk, drawGold, drawCartoon, drawNoir, drawWatercolor, drawOilPaint, drawNightVision, drawHologram, drawInfrared, drawNeonOutline } from './style/index';
 import type { LandmarkList } from '../types';
 
@@ -19,8 +20,9 @@ import type { LandmarkList } from '../types';
 const NO_PIXEL = new Set([
   'none','dog','cat','bunny','fox','lion',
   'lip_red','lip_pink','eyeshadow_smoky','eyeshadow_glam','full_glam',
-  'vampire','devil','angel','alien','alien_face','bat_cowl',
+  'vampire','devil','angel','alien','alien_face',
   'third_eye','clown',
+  'agf_fan',
   'neon_outline',
   'gold',
   // Three.js props — handled separately
@@ -38,6 +40,7 @@ export function applyPixelFilter(
     let out: ImageData | null = null;
     switch (filterId) {
       case 'neon':         out = pxNeon(id.data, W, H, t);        break;
+      case 'neon_dark':    out = pxBlack(W, H);                   break;
       case 'glitch':       out = pxGlitch(id.data, W, H, t);      break;
       case 'thermal':      out = pxThermal(id.data, W, H);        break;
       case 'zombie':       out = pxZombie(id.data, W, H);         break;
@@ -95,9 +98,9 @@ export function applyOverlayFilter(
     case 'angel':   d && drawAngel(d);   break;
     case 'alien':         d && drawAlien(d);         break;
     case 'alien_face':    d && drawAlienFace(d);     break;
-    case 'bat_cowl':      d && drawBatCowl(d);       break;
     case 'third_eye':     d && drawThirdEye(d);      break;
     case 'clown':         d && drawClown(d);         break;
+    case 'agf_fan':       d && drawAgfFan(d);        break;
     case 'big_eyes': {
       // Landmark-accurate big-eyes warp: re-apply with correct eye positions
       if (d) {
@@ -320,6 +323,7 @@ export function applyOverlayFilter(
     // Style overlays
     case 'neon':         d && drawNeonOverlay(d);  break;
     case 'neon_outline': d && drawNeonOutline(d);  break;
+    case 'neon_dark':    d && drawNeonOutline(d);  break;
     case 'cyberpunk':    d && drawCyberpunk(d);   break;
     case 'gold':         d && drawGold(d);        break;
     case 'cartoon':      d && drawCartoon(d);     break;

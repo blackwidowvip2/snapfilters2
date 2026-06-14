@@ -1,6 +1,13 @@
 function lum(r: number, g: number, b: number) { return 0.299*r+0.587*g+0.114*b; }
 function clamp(v: number) { return v<0?0:v>255?255:v; }
 
+/** Fill the whole frame opaque black — used as a backdrop for overlay-only looks. */
+export function pxBlack(W: number, H: number): ImageData {
+  const out = new Uint8ClampedArray(W * H * 4);
+  for (let i = 3; i < out.length; i += 4) out[i] = 255;  // opaque, RGB stays 0
+  return new ImageData(out, W, H);
+}
+
 export function pxNeon(src: Uint8ClampedArray, W: number, H: number, t: number): ImageData {
   const out=new Uint8ClampedArray(src.length);
   const hsl2rgb=(h:number,s:number,l:number)=>{

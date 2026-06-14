@@ -17,6 +17,7 @@ export const FILTERS: FilterDefinition[] = [
   { id:'bunny',            label:'Kanin',        icon:'🐰', category:'animal',    description:'Lange ører og lyserød næse' },
   { id:'fox',              label:'Ræv',          icon:'🦊', category:'animal',    description:'Spidse ører og hvide kinder' },
   { id:'lion',             label:'Løve',         icon:'🦁', category:'animal',    description:'Animeret manke og knurhår' },
+  { id:'horse',            label:'Hest',         icon:'🐴', category:'animal',    description:'3D hestehoved-maske' },
   // Makeup
   { id:'lip_red',          label:'Rød læbe',     icon:'💋', category:'makeup',   description:'Klassisk rød læbestift' },
   { id:'lip_pink',         label:'Pink læbe',    icon:'🌸', category:'makeup',   description:'Blød pink med glans' },
@@ -30,13 +31,13 @@ export const FILTERS: FilterDefinition[] = [
   { id:'angel',            label:'Engel',        icon:'😇', category:'character', description:'Glødende glorie og vinger' },
   { id:'alien',            label:'Alien',        icon:'👽', category:'character', description:'Store sorte øjne og glød' },
   { id:'alien_face',      label:'Alien Ansigt', icon:'🛸', category:'character', description:'Lysende mandelformede øjne og bioluminescens' },
-  { id:'bat_cowl',        label:'Batman',       icon:'🦇', category:'character', description:'Mørk cowl med spidse ører og hvide linser' },
-  { id:'batman2',         label:'Batman 2',     icon:'🦇', category:'character', description:'3D Batman-cowl' },
+  { id:'batman2',         label:'Batman',       icon:'🦇', category:'character', description:'3D Batman-cowl' },
   { id:'third_eye',       label:'Tredje Øje',   icon:'👁️', category:'character', description:'Mystisk lilla øje åbner sig på panden' },
   { id:'clown',           label:'Klovn',        icon:'🤡', category:'character', description:'Hvidt ansigt, røde kinder, stor rød mund, 3D-næse og krøllet regnbuehår' },
   // Style
   { id:'neon',             label:'Neon',         icon:'⚡', category:'style',    description:'Farverige kantlinjer på mørk baggrund' },
   { id:'neon_outline',    label:'Neon Kontur',  icon:'🌈', category:'style',    description:'Glødende neon-kontur langs ansigtslandmarks' },
+  { id:'neon_dark',       label:'Neon Mørk',    icon:'🌑', category:'style',    description:'Helt sort baggrund med lysende neon-ansigtskontur' },
   { id:'pencil_sketch',   label:'Blyantskitse', icon:'✏️', category:'style',    description:'Hvid baggrund med mørke blyantstreger' },
   { id:'cyberpunk',        label:'Cyberpunk',    icon:'🤖', category:'style',    description:'HUD-ringe, kredsløb og scanning' },
   { id:'gold',             label:'Guld',         icon:'🏆', category:'style',    description:'Guldpartikler og metallic makeup' },
@@ -57,6 +58,9 @@ export const FILTERS: FilterDefinition[] = [
   { id:'anon_mask',        label:'Anon Maske',    icon:'🎭', category:'props',    description:'3D anonymous-maske' },
   { id:'anonymous_mask',   label:'Anonymous',     icon:'👤', category:'props',    description:'3D Anonymous / Guy Fawkes-maske' },
   { id:'ironman',          label:'Iron Man',      icon:'🤖', category:'props',    description:'3D Iron Man-hjelm' },
+  { id:'agf_cap',          label:'AGF Kasket',    icon:'🧢', category:'props',    description:'3D AGF-kasket ovenpå hovedet' },
+  { id:'agf_cap_logo',     label:'AGF Kasket Logo', icon:'🧢', category:'props',  description:'Hvid kasket med AGF-byvåben på fronten' },
+  { id:'agf_fan',          label:'AGF Fan',       icon:'🔴', category:'props',    description:'AGF-logo malet på begge kinder' },
   // Distortion (image warps)
   { id:'big_mouth',       label:'Stor Mund',    icon:'👄', category:'distortion', description:'Munden forstørres kraftigt' },
   { id:'huge_mouth',      label:'Ekstra Stor Mund', icon:'😮', category:'distortion', description:'Munden forstørres ekstremt (75% mere end Stor Mund)' },

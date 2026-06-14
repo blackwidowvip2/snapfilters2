@@ -197,6 +197,19 @@ export interface GlbOptions {
    * the eyes and lets the arms swing back, like real glasses.
    */
   pivotZFront?: boolean;
+  /** Force every mesh to a solid colour (e.g. paint a model black). */
+  forceColor?: number;
+  /**
+   * Mesh/node names to EXEMPT from `forceColor` so they keep their own GLB
+   * material (e.g. a white AGF logo embossed on an otherwise blue cap).
+   */
+  keepColorNodes?: string[];
+  /**
+   * Per-vertex paint: given a vertex's local (x,y,z), return its [r,g,b] (0–1).
+   * Used to colour a single-mesh model by region (e.g. brown horse head with a
+   * white muzzle and black nose) when it has no materials or textures.
+   */
+  vertexColorFn?: (x: number, y: number, z: number) => [number, number, number];
 }
 
 /**
@@ -258,8 +271,44 @@ export function createSunglassesFromGLB(url: string, opts: GlbOptions = {}): THR
           if (hide && hide.includes(o.name)) o.visible = false;
           const mesh = o as THREE.Mesh;
           if (mesh.isMesh) {
+            const keep = opts.keepColorNodes?.some((n) => o.name.includes(n));
+            if (opts.vertexColorFn) {
+              // Paint per vertex by NORMALISED position (0–1 per axis from the
+              // geometry's bounding box), so the region colouring works regardless
+              // of the model's coordinate space or quantisation.
+              const geo = mesh.geometry;
+              geo.computeBoundingBox();
+              const bb = geo.boundingBox!;
+              const sx = 1 / ((bb.max.x - bb.min.x) || 1);
+              const sy = 1 / ((bb.max.y - bb.min.y) || 1);
+              const sz = 1 / ((bb.max.z - bb.min.z) || 1);
+              const pos = geo.attributes.position as THREE.BufferAttribute;
+              const colors = new Float32Array(pos.count * 3);
+              for (let i = 0; i < pos.count; i++) {
+                const nx = (pos.getX(i) - bb.min.x) * sx;
+                const ny = (pos.getY(i) - bb.min.y) * sy;
+                const nz = (pos.getZ(i) - bb.min.z) * sz;
+                const [r, g, b] = opts.vertexColorFn(nx, ny, nz);
+                colors[i * 3] = r; colors[i * 3 + 1] = g; colors[i * 3 + 2] = b;
+              }
+              geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+              mesh.material = new THREE.MeshStandardMaterial({
+                vertexColors: true, roughness: 0.85, metalness: 0.0, envMapIntensity: 0.3,
+              });
+            } else if (opts.forceColor !== undefined && !keep) {
+              // Paint the mesh a solid colour (a dark, slightly glossy material so
+              // the form still catches the environment light instead of going flat).
+              mesh.material = new THREE.MeshStandardMaterial({
+                color: opts.forceColor,
+                roughness: 0.5,
+                metalness: 0.3,
+                envMapIntensity: 1.0,
+              });
+            }
+            // Boost reflections for the GLB's own materials, but leave vertex-
+            // painted (matte) models alone so their colours read true.
             const mat = mesh.material as THREE.MeshStandardMaterial;
-            if (mat && 'envMapIntensity' in mat) mat.envMapIntensity = 1.4;
+            if (mat && 'envMapIntensity' in mat && !opts.vertexColorFn) mat.envMapIntensity = 1.4;
           }
         });
 
@@ -387,12 +436,14 @@ export function updateHeadOccluder(
   const yaw = (noseTip.x - eyeCx) / (eyeDist * 0.9);
   const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
 
-  // Ellipsoid radii (base sphere has radius 1) — sized to the HEAD, not oversized.
-  // A tight, head-shaped occluder hides only what curves in behind the head/ear,
-  // leaving the visible run of the temples (lens → ear) in front of it on show.
-  const rx = faceWidth * 0.66;
-  const ry = faceWidth * 0.88;
-  const rz = faceWidth * 1.05;
+  // Ellipsoid radii (base sphere has radius 1). Tall enough that the CROWN sits on
+  // the wide side of the ellipsoid (with real Z-depth to cull a cap), not at the
+  // narrow top pole, and deep (rz) so there is volume behind the head to hide the
+  // rear of props. Increasing rz only extends the BACK — the front plane below is
+  // independent of rz — so the glasses lenses in front stay visible.
+  const rx = faceWidth * 0.70;
+  const ry = faceWidth * 1.30;
+  const rz = faceWidth * 1.30;
 
   // Put the ellipsoid's FRONT a little BEHIND the face centre, so only the rear
   // of the temples (the part that wraps in behind the ear) falls behind the
@@ -456,6 +507,95 @@ export function updateMask(
 }
 
 // ════════════════════════════════════════════════════════════════════════
+//  Full-head mask with a per-object PERSPECTIVE "depth" (the global camera is
+//  orthographic, so a real Z move wouldn't shift it on screen). `depth` > 0
+//  recedes the mask: it shrinks and slides toward the screen centre exactly as a
+//  perspective camera would, while every other prop stays orthographic.
+// ════════════════════════════════════════════════════════════════════════
+export function updatePerspectiveMask(depth = 0, focal = 600) {
+  return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
+    const pt = (idx: number) => ({
+      x:  (1 - lm[idx].x) * W - W / 2,
+      y: -(lm[idx].y * H - H / 2),
+      z: -(lm[idx].z ?? 0) * W,
+    });
+
+    const lOuter = pt(33), lInner = pt(133);
+    const rOuter = pt(263), rInner = pt(362);
+    const lEye = { x: (lOuter.x + lInner.x) / 2, y: (lOuter.y + lInner.y) / 2 };
+    const rEye = { x: (rOuter.x + rInner.x) / 2, y: (rOuter.y + rInner.y) / 2 };
+    const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+    const eyeCx = (lEye.x + rEye.x) / 2, eyeCy = (lEye.y + rEye.y) / 2;
+
+    const cheekL = pt(234), cheekR = pt(454);
+    const faceWidth = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
+
+    const brow = pt(10), chin = pt(152);
+    const cx = (brow.x + chin.x) / 2, cy = (brow.y + chin.y) / 2, cz = (brow.z + chin.z) / 2;
+
+    let ex = lEye.x - rEye.x, ey = lEye.y - rEye.y;
+    if (ex < 0) { ex = -ex; ey = -ey; }
+    const roll = Math.atan2(ey, ex);
+    const noseTip = pt(1);
+    const yaw = (noseTip.x - eyeCx) / (eyeDist * 0.9);
+    const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
+
+    // Perspective foreshortening: project the anchor + scale toward the screen
+    // centre (0,0) by focal/(focal+depth).
+    const persp = focal / (focal + depth);
+    prop.position.set(cx * persp, cy * persp, cz);
+    prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
+    prop.scale.setScalar((faceWidth / MODEL_REF_WIDTH) * persp);
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Mask anchored on the EYE LINE — for masks whose cut-out eye holes must line
+//  up with the real eyes (e.g. the Batman mask). Auto-scales with the face, so
+//  a smaller person gets a proportionally smaller mask. `eyeBias` shifts it up
+//  (+) or down (−) the head axis, as a fraction of face height, to land the
+//  holes exactly on the eyes.
+// ════════════════════════════════════════════════════════════════════════
+export function updateEyeMask(eyeBias = 0, scaleMul = 1) {
+  return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
+    const pt = (idx: number) => ({
+      x:  (1 - lm[idx].x) * W - W / 2,
+      y: -(lm[idx].y * H - H / 2),
+      z: -(lm[idx].z ?? 0) * W,
+    });
+
+    const lOuter = pt(33), lInner = pt(133);
+    const rOuter = pt(263), rInner = pt(362);
+    const lEye = { x: (lOuter.x + lInner.x) / 2, y: (lOuter.y + lInner.y) / 2 };
+    const rEye = { x: (rOuter.x + rInner.x) / 2, y: (rOuter.y + rInner.y) / 2 };
+    const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+    const eyeCx = (lEye.x + rEye.x) / 2, eyeCy = (lEye.y + rEye.y) / 2;
+    const eyeCz = (pt(33).z + pt(263).z) / 2;
+
+    const cheekL = pt(234), cheekR = pt(454);
+    const faceWidth = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
+
+    // Head-up axis for the vertical bias.
+    const brow = pt(10), chin = pt(152);
+    const faceHeight = Math.hypot(brow.x - chin.x, brow.y - chin.y) || 1;
+    const ux = (brow.x - chin.x) / faceHeight, uy = (brow.y - chin.y) / faceHeight;
+
+    let ex = lEye.x - rEye.x, ey = lEye.y - rEye.y;
+    if (ex < 0) { ex = -ex; ey = -ey; }
+    const roll = Math.atan2(ey, ex);
+    const noseTip = pt(1);
+    const yaw = (noseTip.x - eyeCx) / (eyeDist * 0.9);
+    const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
+
+    // Anchor on the eye line so the mask's eye holes meet the eyes.
+    const lift = faceHeight * eyeBias;
+    prop.position.set(eyeCx + ux * lift, eyeCy + uy * lift, eyeCz + eyeDist * 0.1);
+    prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
+    prop.scale.setScalar((faceWidth / MODEL_REF_WIDTH) * scaleMul);
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════
 //  Map MediaPipe landmarks → transform for ON-TOP-OF-HEAD props (bunny ears).
 //  Anchored above the forehead and lifted along the head-up axis so the ears
 //  stand on the crown and tilt with the head.
@@ -501,5 +641,49 @@ export function updateBunnyEars(
   prop.position.set(brow.x + ux * lift, brow.y + uy * lift, brow.z);
   prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
   prop.scale.setScalar(faceWidth / MODEL_REF_WIDTH);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  On-top-of-head prop with a TUNABLE lift (e.g. a cap, which sits lower on the
+//  head than upright bunny ears). `liftFraction` is the rise above the forehead
+//  as a fraction of face height; `scaleMul` fine-tunes the size.
+// ════════════════════════════════════════════════════════════════════════
+export function updateHeadTop(liftFraction = 0.45, scaleMul = 1, depthStretch = 1) {
+  return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
+    const pt = (idx: number) => ({
+      x:  (1 - lm[idx].x) * W - W / 2,
+      y: -(lm[idx].y * H - H / 2),
+      z: -(lm[idx].z ?? 0) * W,
+    });
+
+    const lOuter = pt(33), lInner = pt(133);
+    const rOuter = pt(263), rInner = pt(362);
+    const lEye = { x: (lOuter.x + lInner.x) / 2, y: (lOuter.y + lInner.y) / 2 };
+    const rEye = { x: (rOuter.x + rInner.x) / 2, y: (rOuter.y + rInner.y) / 2 };
+    const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+    const eyeCx = (lEye.x + rEye.x) / 2, eyeCy = (lEye.y + rEye.y) / 2;
+
+    const cheekL = pt(234), cheekR = pt(454);
+    const faceWidth = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
+
+    const brow = pt(10), chin = pt(152);
+    const faceHeight = Math.hypot(brow.x - chin.x, brow.y - chin.y) || 1;
+    const ux = (brow.x - chin.x) / faceHeight, uy = (brow.y - chin.y) / faceHeight;
+
+    let ex = lEye.x - rEye.x, ey = lEye.y - rEye.y;
+    if (ex < 0) { ex = -ex; ey = -ey; }
+    const roll = Math.atan2(ey, ex);
+    const noseTip = pt(1);
+    const yaw = (noseTip.x - eyeCx) / (eyeDist * 0.9);
+    const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
+
+    const lift = faceHeight * liftFraction;
+    prop.position.set(brow.x + ux * lift, brow.y + uy * lift, brow.z);
+    prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
+    // Stretch ONLY the depth (local Z) so e.g. a cap reaches back over the whole
+    // crown without growing wider/taller.
+    const base = (faceWidth / MODEL_REF_WIDTH) * scaleMul;
+    prop.scale.set(base, base, base * depthStretch);
+  };
 }
 
