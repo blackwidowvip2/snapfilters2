@@ -1,6 +1,6 @@
 import { DrawCtx } from './DrawCtx';
 import {
-  pxNeon, pxGlitch, pxThermal, pxZombie, pxVampire, pxCyberpunk,
+  pxNeon, pxGlitch, pxThermal, pxCyberpunk,
   pxNoir, pxCartoon, pxWatercolor, pxOilPaint, pxNightVision, pxHologram, pxInfrared,
   pxMeltFace, pxPencilSketch, pxKaleidoscope, pxBlack,
 } from './pixelFilters';
@@ -9,11 +9,13 @@ import { drawCat }   from './animal/cat';
 import { drawBunny } from './animal/bunny';
 import { drawFox }   from './animal/fox';
 import { drawLion }  from './animal/lion';
-import { drawLipRed, drawLipPink, drawEyeshadowSmoky, drawEyeshadowGlam, drawFullGlam } from './makeup/index';
+import { drawLipRed, drawLipPink, drawEyeshadowSmoky } from './makeup/index';
 import { drawClown } from './makeup/clownFilter';
+import { drawWildMan } from './character/wildManFilter';
 import { drawAgfFan } from './props/agfFan';
-import { drawVampire, drawZombie, drawDevil, drawAngel, drawAlien, drawAlienFace, pxBigEyes, pxBigMouth, pxWideLips, pxAlienHead, pxVerticalScale, pxSlimFace, pxSwirlFace, drawThirdEye } from './character/index';
-import { drawNeonOverlay, drawCyberpunk, drawGold, drawCartoon, drawNoir, drawWatercolor, drawOilPaint, drawNightVision, drawHologram, drawInfrared, drawNeonOutline } from './style/index';
+import { drawDenmarkFan } from './props/denmarkFan';
+import { pxBigEyes, pxBigMouth, pxWideLips, pxAlienHead, pxVerticalScale, pxSlimFace, pxSwirlFace, pxSadMouth, drawThirdEye } from './character/index';
+import { drawNeonOverlay, drawCyberpunk, drawCartoon, drawNoir, drawWatercolor, drawOilPaint, drawNightVision, drawHologram, drawInfrared, drawNeonOutline } from './style/index';
 import type { LandmarkList } from '../types';
 
 // Filters that skip pixel processing (canvas overlay only)
@@ -22,7 +24,9 @@ const NO_PIXEL = new Set([
   'lip_red','lip_pink','eyeshadow_smoky','eyeshadow_glam','full_glam',
   'vampire','devil','angel','alien','alien_face',
   'third_eye','clown',
-  'agf_fan',
+  // Three.js disguise prop — handled separately
+  'disguise','wild_man',
+  'agf_fan','denmark_fan',
   'neon_outline',
   'gold',
   // Three.js props — handled separately
@@ -43,8 +47,6 @@ export function applyPixelFilter(
       case 'neon_dark':    out = pxBlack(W, H);                   break;
       case 'glitch':       out = pxGlitch(id.data, W, H, t);      break;
       case 'thermal':      out = pxThermal(id.data, W, H);        break;
-      case 'zombie':       out = pxZombie(id.data, W, H);         break;
-      case 'vampire':      out = pxVampire(id.data, W, H);        break;
       case 'cyberpunk':    out = pxCyberpunk(id.data, W, H);      break;
       case 'noir':         out = pxNoir(id.data, W, H);           break;
       case 'cartoon':      out = pxCartoon(id.data, W, H);        break;
@@ -89,26 +91,23 @@ export function applyOverlayFilter(
     case 'lip_red':         d && drawLipRed(d);         break;
     case 'lip_pink':        d && drawLipPink(d);        break;
     case 'eyeshadow_smoky': d && drawEyeshadowSmoky(d); break;
-    case 'eyeshadow_glam':  d && drawEyeshadowGlam(d);  break;
-    case 'full_glam':       d && drawFullGlam(d);       break;
     // Character
-    case 'vampire': d && drawVampire(d); break;
-    case 'zombie':  d && drawZombie(d);  break;
-    case 'devil':   d && drawDevil(d);   break;
-    case 'angel':   d && drawAngel(d);   break;
-    case 'alien':         d && drawAlien(d);         break;
-    case 'alien_face':    d && drawAlienFace(d);     break;
     case 'third_eye':     d && drawThirdEye(d);      break;
     case 'clown':         d && drawClown(d);         break;
+    case 'wild_man':      d && drawWildMan(d);       break;
     case 'agf_fan':       d && drawAgfFan(d);        break;
+    case 'denmark_fan':   d && drawDenmarkFan(d);    break;
     case 'big_eyes': {
       // Landmark-accurate big-eyes warp: re-apply with correct eye positions
       if (d) {
         const lEye = d.eyeCenter('left');
         const rEye = d.eyeCenter('right');
-        // Radius just large enough to cover one eye + lids; ~0.6× the
-        // inter-ocular distance keeps the two warps from overlapping.
-        const radius = d.s * 0.6;
+        // Radius just large enough to cover one eye + lids. Cap it at half the
+        // distance between the eye CENTRES so the two warps never overlap over
+        // the nose bridge (an overlap lets the second warp overwrite the first,
+        // which previously distorted one eye toward the nose).
+        const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+        const radius = Math.min(d.s * 0.6, eyeDist * 0.5);
         try {
           const id2 = ctx.getImageData(0, 0, W, H);
           const warped = pxBigEyes(id2.data, W, H,
@@ -152,20 +151,25 @@ export function applyOverlayFilter(
       }
       break;
     }
-    case 'big_lips': {
+    case 'big_lips_small': {
       // Wider lips, focused on the lip band. Anisotropic ellipse: rx wide so the
       // lips grow outward sideways, ry short so the chin/nose are left alone.
+      // Magnification reduced by 30% then a further 15%.
+      // The lip growth is driven by the scaleX/scaleY magnification amounts
+      // (ax = 1 - 1/scale); reducing those amounts by 30% gives 30% smaller lips.
       if (d) {
         const mc = d.mouthCenter();
         const mL = d.pt(61), mR = d.pt(291);   // mouth corners
         const up = d.pt(0),  lo = d.pt(17);    // upper-lip top, lower-lip bottom
         const mouthW = Math.hypot(mR.x - mL.x, mR.y - mL.y);
         const lipH   = Math.hypot(lo.x - up.x, lo.y - up.y);
-        const rx = mouthW * 1.45;              // lip corners sit inside the plateau
+        const rx = mouthW * 1.45;
         const ry = Math.max(lipH * 0.7, d.s * 0.075);
+        // ax = 1 - 1/7.0 = 0.857 → ×0.7 → 0.6 → ×0.85 → 0.51 → scaleX = 1/(1-0.51) ≈ 2.04
+        // ay = 1 - 1/1.7 = 0.412 → ×0.7 → 0.288 → ×0.85 → 0.245 → scaleY = 1/(1-0.245) ≈ 1.32
         try {
           const id2 = ctx.getImageData(0, 0, W, H);
-          const warped = pxWideLips(id2.data, W, H, mc.x, mc.y, rx, ry, 7.0, 1.7);
+          const warped = pxWideLips(id2.data, W, H, mc.x, mc.y, rx, ry, 2.04, 1.32);
           ctx.putImageData(warped, 0, 0);
         } catch (_) { /* taint guard */ }
       }
@@ -178,10 +182,12 @@ export function applyOverlayFilter(
           // 1) Eyes
           const lEye = d.eyeCenter('left');
           const rEye = d.eyeCenter('right');
+          const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+          const eyeRadius = Math.min(d.s * 0.6, eyeDist * 0.5);
           let id2 = ctx.getImageData(0, 0, W, H);
           let warped = pxBigEyes(id2.data, W, H,
             [{ x: lEye.x, y: lEye.y }, { x: rEye.x, y: rEye.y }],
-            d.s * 0.6, 1.6,
+            eyeRadius, 1.6,
           );
           ctx.putImageData(warped, 0, 0);
           // 2) Mouth — re-read the already-warped frame so both stack.
@@ -223,7 +229,7 @@ export function applyOverlayFilter(
         try {
           const id2 = ctx.getImageData(0, 0, W, H);
           const warped = pxBigEyes(id2.data, W, H,
-            [out(earR), out(earL)], d.s * 0.58, 3.0,
+            [out(earR), out(earL)], d.s * 1.16, 3.0,
           );
           ctx.putImageData(warped, 0, 0);
         } catch (_) { /* taint guard */ }
@@ -284,7 +290,7 @@ export function applyOverlayFilter(
         const faceH = Math.abs(chin.y - fh.y);
         try {
           const id2 = ctx.getImageData(0, 0, W, H);
-          const warped = pxAlienHead(id2.data, W, H, fc.x, cy, d.s * 1.7, faceH * 0.6, 0.66);
+          const warped = pxAlienHead(id2.data, W, H, fc.x, cy, d.s * 1.7, faceH * 0.6, 0.79);
           ctx.putImageData(warped, 0, 0);
         } catch (_) { /* taint guard */ }
       }
@@ -294,12 +300,15 @@ export function applyOverlayFilter(
       if (d) {
         const mc   = d.mouthCenter();
         const fh   = d.pt(10);
+        const nose = d.pt(1);
         const chin = d.pt(152);
-        const cy   = (fh.y + chin.y) / 2;
+        // Centre the warp on the actual cheek line (between nose tip and chin)
+        // instead of the mid-head, so the bulge lands on the cheeks.
+        const cy   = (nose.y + chin.y) / 2;
         const faceH = Math.abs(chin.y - fh.y);
         try {
           const id2 = ctx.getImageData(0, 0, W, H);
-          const warped = pxSlimFace(id2.data, W, H, mc.x, cy, d.s * 1.8, faceH * 0.52, 0.22);
+          const warped = pxSlimFace(id2.data, W, H, mc.x, cy, d.s * 1.8, faceH * 0.34, 0.349);
           ctx.putImageData(warped, 0, 0);
         } catch (_) { /* taint guard */ }
       }
@@ -320,12 +329,31 @@ export function applyOverlayFilter(
       }
       break;
     }
+    case 'sad_face': {
+      // Always-sad: drag only the mouth corners downward into a frown.
+      if (d) {
+        const mc = d.mouthCenter();
+        const mL = d.pt(61), mR = d.pt(291);   // mouth corners
+        const up = d.pt(0),  lo = d.pt(17);    // upper-lip top, lower-lip bottom
+        const mouthW = Math.hypot(mR.x - mL.x, mR.y - mL.y);
+        const lipH   = Math.hypot(lo.x - up.x, lo.y - up.y);
+        // Extend slightly past the corners; keep the band tight to the lips.
+        const halfW   = mouthW * 0.62;
+        const bandH   = Math.max(lipH * 0.9, d.s * 0.05);
+        const maxDrop = mouthW * 0.5;
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxSadMouth(id2.data, W, H, mc.x, mc.y, halfW, bandH, maxDrop);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
     // Style overlays
     case 'neon':         d && drawNeonOverlay(d);  break;
     case 'neon_outline': d && drawNeonOutline(d);  break;
     case 'neon_dark':    d && drawNeonOutline(d);  break;
     case 'cyberpunk':    d && drawCyberpunk(d);   break;
-    case 'gold':         d && drawGold(d);        break;
     case 'cartoon':      d && drawCartoon(d);     break;
     case 'noir':         d && drawNoir(d);        break;
     case 'watercolor':   d && drawWatercolor(d);  break;

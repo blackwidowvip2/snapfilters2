@@ -4,8 +4,9 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { useStore } from '../store/useStore';
 // createSunglasses() (procedural) is still available in ../filters/props/sunglasses
 // as a fallback if you ever want to render without the .glb asset.
-import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateHeadTop, updatePerspectiveMask } from '../filters/props/sunglasses';
+import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateHeadTop, updateEnclosingMask } from '../filters/props/sunglasses';
 import { createClownNose, createClownHair, updateClownNose, updateClownHair } from '../filters/props/clown';
+import { createDisguise } from '../filters/props/disguise3d';
 import type { LandmarkList } from '../types';
 
 type Updater = (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number) => void;
@@ -42,10 +43,11 @@ const FILTER_PROPS: Record<string, string[]> = {
   anon_mask:     ['anon_mask'],
   anonymous_mask:['anonymous_mask'],
   ironman:       ['ironman'],
-  horse:         ['horse'],
+  horse2:        ['horse2'],
   agf_cap:       ['agf_cap'],
   agf_cap_logo:  ['agf_cap_logo'],
   batman2:       ['batman2'],
+  disguise:      ['disguise'],
   clown:         ['clown_hair', 'clown_nose'],
   bunny:         ['bunny_ears'],
 };
@@ -147,11 +149,12 @@ export function useThreeRenderer(
       // rotation. Coloured black; anchored on the eye line (see updateProp).
       batman2:       () => createSunglassesFromGLB(urls.batman2, { fit: 1.3, forceColor: 0x0a0a0a }),
       bunny_ears:    () => createSunglassesFromGLB(urls.bunny_ears, { fit: 1.0 }),
-      // Single-mesh horse head, painted by region: brown base, white muzzle,
-      // black nose/mouth — matching the reference horse mask.
-      // Full-head horse mask, raised to cover the crown. Depth handled by the
-      // perspective updater (the cap-style z offset is orthographic-invisible).
-      horse:         () => createSunglassesFromGLB(urls.horse, { fit: 1.6, vertexColorFn: horseColor, offset: { y: 2.5 } }),
+      // Hest — closed 360° head that ENCLOSES the whole head: the horse head is
+      // built clearly larger than the real head and pushed back (see
+      // updateEnclosingMask) so the person's head sits INSIDE it like a helmet.
+      horse2:        () => createSunglassesFromGLB(urls.horse, { fit: 1.8, vertexColorFn: horseColor, offset: { y: 2 } }),
+      // Groucho disguise — procedural 3D glasses + brows + nose + moustache.
+      disguise:      createDisguise,
       clown_nose:    createClownNose,
       clown_hair:    createClownHair,
     };
@@ -162,12 +165,14 @@ export function useThreeRenderer(
       // This model turns opposite to the head with the standard yaw — invert it.
       anonymous_mask:(p, lm, W, H) => { updateMask(p, lm, W, H); p.rotation.y = -p.rotation.y; },
       ironman:       updateMask,
-      horse:         updatePerspectiveMask(-100),   // negative = enlarge + raise (cover crown); positive = recede/shrink
+      horse2:        updateEnclosingMask(0.6),   // pushed deep into the skull so the head sits INSIDE the horse head
       agf_cap:       updateHeadTop(-0.20, 0.85, 1.0),   // lowered onto the head, 15% smaller
       agf_cap_logo:  updateHeadTop(-0.20, 0.85, 1.0),
       batman2:       updateEyeMask(0.37, 0.87),   // lifted to the eyes; 87% size so it fits the head
 
       bunny_ears:    updateBunnyEars,
+      // Anchored on the eye line so the lenses sit over the eyes.
+      disguise:      updateEyeMask(0, 1),
       clown_nose:    updateClownNose,
       clown_hair:    updateClownHair,
     };
@@ -210,6 +215,17 @@ export function useThreeRenderer(
     );
     camera.position.z = 500;
 
+    // Perspective camera used ONLY for the enclosing horse (Hest 2), so that
+    // model has true 3D volume that wraps around the head — and turning the head
+    // shows the side/back correctly. Calibrated so that at z=0 it matches the
+    // orthographic mapping (object world-pixels = screen pixels); the closer the
+    // distance PERSP_D, the stronger the perspective wrap.
+    const PERSP_D = 900;
+    const perspCam = new THREE.PerspectiveCamera(40, initW / initH, 1, 5000);
+    perspCam.position.set(0, 0, PERSP_D);
+    perspCam.lookAt(0, 0, 0);
+    const PERSP_FILTERS = new Set(['horse2']);
+
     // ── Frame loop ──────────────────────────────────────────────────────
     let rafId: number;
     let lastW = 0, lastH = 0;
@@ -234,6 +250,11 @@ export function useThreeRenderer(
         camera.top    =  vH / 2;
         camera.bottom = -vH / 2;
         camera.updateProjectionMatrix();
+        // Vertical FOV so the frustum height at z=0 equals the video height
+        // (matches the orthographic 1:1 world-pixel mapping at the head plane).
+        perspCam.aspect = vW / vH;
+        perspCam.fov = 2 * Math.atan((vH / 2) / PERSP_D) * 180 / Math.PI;
+        perspCam.updateProjectionMatrix();
       }
 
       const f     = filterRef.current;
@@ -298,7 +319,9 @@ export function useThreeRenderer(
         }
       }
 
-      renderer.render(scene, camera);
+      // The enclosing horse renders through the perspective camera for true 3D
+      // wrap; every other filter uses the orthographic camera.
+      renderer.render(scene, PERSP_FILTERS.has(f) ? perspCam : camera);
     };
 
     rafId = requestAnimationFrame(frame);

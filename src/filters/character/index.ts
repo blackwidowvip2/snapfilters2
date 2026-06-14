@@ -7,6 +7,8 @@ export { pxAlienHead }      from './alienHeadFilter';
 export { pxVerticalScale }  from './verticalWarpFilter';
 export { pxSlimFace }       from './slimFaceFilter';
 export { pxSwirlFace }      from './swirlFaceFilter';
+export { pxSadMouth }       from './sadMouthFilter';
+export { drawDisguise }     from './disguiseFilter';
 export { drawThirdEye }     from './thirdEyeFilter';
 
 // ── Vampire ────────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import React, { useRef, useCallback } from 'react';
 import { useStore } from './store/useStore';
 import { useCamera } from './hooks/useCamera';
 import { useFaceMesh } from './hooks/useFaceMesh';
+import { useSelfieSegmentation } from './hooks/useSelfieSegmentation';
 import { useRender } from './hooks/useRender';
 import { useThreeRenderer } from './hooks/useThreeRenderer';
 import { LoadingScreen } from './components/LoadingScreen';
@@ -18,6 +19,7 @@ const App: React.FC = () => {
   const { isLoaded, setLoaded, activeFilter, setCapturedImage } = useStore();
   const { videoRef, startCamera, flipCamera } = useCamera();
   const { init: initFaceMesh } = useFaceMesh(videoRef);
+  const { init: initSegmentation } = useSelfieSegmentation(videoRef);
   useRender(videoRef, canvasRef);
   useThreeRenderer(videoRef, threeCanvasRef);
 
@@ -25,8 +27,9 @@ const App: React.FC = () => {
   const handleStart = useCallback(async () => {
     await startCamera('user');
     await initFaceMesh();
+    await initSegmentation();
     setLoaded(true);
-  }, [startCamera, initFaceMesh, setLoaded]);
+  }, [startCamera, initFaceMesh, initSegmentation, setLoaded]);
 
   // ── Capture ──────────────────────────────────────────────
   const handleCapture = useCallback(() => {

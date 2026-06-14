@@ -224,11 +224,17 @@ export function createSunglassesFromGLB(url: string, opts: GlbOptions = {}): THR
   Promise.all([
     import('three/examples/jsm/loaders/GLTFLoader.js'),
     import('three/examples/jsm/libs/meshopt_decoder.module.js'),
-  ]).then(([{ GLTFLoader }, { MeshoptDecoder }]) => {
+    import('three/examples/jsm/loaders/DRACOLoader.js'),
+  ]).then(([{ GLTFLoader }, { MeshoptDecoder }, { DRACOLoader }]) => {
     const loader = new GLTFLoader();
     // Required for meshopt-compressed models (e.g. the optimised witch hat);
     // harmless for models that don't use the extension.
     loader.setMeshoptDecoder(MeshoptDecoder);
+    // Required for Draco-compressed models (e.g. the optimised horse head).
+    // Decoder files are served from public/draco/ so it works offline.
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
+    loader.setDRACOLoader(dracoLoader);
     loader.load(
       url,
       (gltf) => {
@@ -550,6 +556,48 @@ export function updatePerspectiveMask(depth = 0, focal = 600) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+//  Enclosing mask — for a closed 360° head model that should SURROUND the head
+//  so the person reads as being INSIDE it. Anchored on the head's centre of
+//  rotation (eye line, pushed back into the skull) rather than the face, so when
+//  the head turns the mask pivots around the same centre and the head stays
+//  enclosed from every angle. `backFrac` sets how far back (into the head) the
+//  pivot sits, as a fraction of face width.
+// ════════════════════════════════════════════════════════════════════════
+export function updateEnclosingMask(backFrac = 0.3) {
+  return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
+    const pt = (idx: number) => ({
+      x:  (1 - lm[idx].x) * W - W / 2,
+      y: -(lm[idx].y * H - H / 2),
+      z: -(lm[idx].z ?? 0) * W,
+    });
+
+    const lOuter = pt(33), lInner = pt(133);
+    const rOuter = pt(263), rInner = pt(362);
+    const lEye = { x: (lOuter.x + lInner.x) / 2, y: (lOuter.y + lInner.y) / 2 };
+    const rEye = { x: (rOuter.x + rInner.x) / 2, y: (rOuter.y + rInner.y) / 2 };
+    const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+    const eyeCx = (lEye.x + rEye.x) / 2, eyeCy = (lEye.y + rEye.y) / 2;
+    const eyeCz = (pt(33).z + pt(263).z) / 2;
+
+    const cheekL = pt(234), cheekR = pt(454);
+    const faceWidth = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
+
+    let ex = lEye.x - rEye.x, ey = lEye.y - rEye.y;
+    if (ex < 0) { ex = -ex; ey = -ey; }
+    const roll = Math.atan2(ey, ex);
+    const noseTip = pt(1);
+    const yaw = (noseTip.x - eyeCx) / (eyeDist * 0.9);
+    const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
+
+    // Pivot at the head's centre (eye line, set back into the skull) so the mask
+    // wraps around the head and turns with it from every angle.
+    prop.position.set(eyeCx, eyeCy, eyeCz - faceWidth * backFrac);
+    prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
+    prop.scale.setScalar(faceWidth / MODEL_REF_WIDTH);
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════
 //  Mask anchored on the EYE LINE — for masks whose cut-out eye holes must line
 //  up with the real eyes (e.g. the Batman mask). Auto-scales with the face, so
 //  a smaller person gets a proportionally smaller mask. `eyeBias` shifts it up
@@ -590,6 +638,54 @@ export function updateEyeMask(eyeBias = 0, scaleMul = 1) {
     // Anchor on the eye line so the mask's eye holes meet the eyes.
     const lift = faceHeight * eyeBias;
     prop.position.set(eyeCx + ux * lift, eyeCy + uy * lift, eyeCz + eyeDist * 0.1);
+    prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
+    prop.scale.setScalar((faceWidth / MODEL_REF_WIDTH) * scaleMul);
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Mustache — anchored on the philtrum (between the nose base and the upper
+//  lip) so it sits under the nose and tracks head roll/yaw/pitch. `scaleMul`
+//  sizes it relative to the face; `bias` nudges it up (+) / down (−) along the
+//  head-up axis as a fraction of face height.
+// ════════════════════════════════════════════════════════════════════════
+export function updateMustache(scaleMul = 1, bias = 0) {
+  return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
+    const pt = (idx: number) => ({
+      x:  (1 - lm[idx].x) * W - W / 2,
+      y: -(lm[idx].y * H - H / 2),
+      z: -(lm[idx].z ?? 0) * W,
+    });
+
+    const lOuter = pt(33), lInner = pt(133);
+    const rOuter = pt(263), rInner = pt(362);
+    const lEye = { x: (lOuter.x + lInner.x) / 2, y: (lOuter.y + lInner.y) / 2 };
+    const rEye = { x: (rOuter.x + rInner.x) / 2, y: (rOuter.y + rInner.y) / 2 };
+    const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+    const eyeCx = (lEye.x + rEye.x) / 2, eyeCy = (lEye.y + rEye.y) / 2;
+
+    const cheekL = pt(234), cheekR = pt(454);
+    const faceWidth = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
+
+    const brow = pt(10), chin = pt(152);
+    const faceHeight = Math.hypot(brow.x - chin.x, brow.y - chin.y) || 1;
+    const ux = (brow.x - chin.x) / faceHeight, uy = (brow.y - chin.y) / faceHeight;
+
+    let ex = lEye.x - rEye.x, ey = lEye.y - rEye.y;
+    if (ex < 0) { ex = -ex; ey = -ey; }
+    const roll = Math.atan2(ey, ex);
+    const noseTip = pt(1);
+    const yaw = (noseTip.x - eyeCx) / (eyeDist * 0.9);
+    const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
+
+    // Anchor on the philtrum: midpoint between the nose base (2) and upper-lip
+    // top (0). A small forward offset keeps it clear of the skin.
+    const noseBottom = pt(2), lipTop = pt(0);
+    const ax = (noseBottom.x + lipTop.x) / 2;
+    const ay = (noseBottom.y + lipTop.y) / 2;
+    const az = (noseBottom.z + lipTop.z) / 2;
+    const lift = faceHeight * bias;
+    prop.position.set(ax + ux * lift, ay + uy * lift, az + eyeDist * 0.15);
     prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
     prop.scale.setScalar((faceWidth / MODEL_REF_WIDTH) * scaleMul);
   };

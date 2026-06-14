@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Temporary model backup (not shipped)
+Horse_orig_backup.glb
