@@ -10,7 +10,11 @@
 // Camera access (getUserMedia) is hardware, not network, so the live filters
 // keep working offline — only the very first load needs a connection.
 
-const CACHE = 'snapfilters-v1';
+// The version token is replaced with a unique build id at build time (see the
+// swVersion plugin in vite.config.ts), so every deploy busts the old cache
+// automatically. In dev it stays as the literal token — harmless, since the SW
+// only registers in production builds.
+const CACHE = 'snapfilters-__SW_VERSION__';
 
 self.addEventListener('install', (event) => {
   // Pre-cache the app shell so a navigation works offline immediately.
