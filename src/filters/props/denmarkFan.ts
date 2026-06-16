@@ -21,5 +21,5 @@ function ensureImage() {
 export function drawDenmarkFan(d: DrawCtx): void {
   ensureImage();
   if (!ready || !img) return;
-  paintOnCheeks(d, img, { mirror: true, tilt: 0.26, inward: 0.15, heightScale: 0.2625, opacity: 0.75 });
+  paintOnCheeks(d, img, { flipCheek: 'right', bowDir: -1, tilt: 0.16, inward: 0.15, heightScale: 0.2625, opacity: 0.75 });
 }

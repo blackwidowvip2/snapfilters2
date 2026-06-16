@@ -14,6 +14,7 @@ export const FILTER_CATEGORIES = [
 export const FILTERS: FilterDefinition[] = [
   // Animal
   { id:'dog',              label:'Hund',        icon:'🐶', category:'animal',    description:'Hunde-ører, næse og tunge' },
+  { id:'dog2',             label:'Hund 2',       icon:'🐕', category:'animal',    description:'3D malet hundeansigt' },
   { id:'cat',              label:'Kat',          icon:'🐱', category:'animal',    description:'Katteøjne med slidsepupiller' },
   { id:'bunny',            label:'Kanin',        icon:'🐰', category:'animal',    description:'Lange ører og lyserød næse' },
   { id:'fox',              label:'Ræv',          icon:'🦊', category:'animal',    description:'Spidse ører og hvide kinder' },

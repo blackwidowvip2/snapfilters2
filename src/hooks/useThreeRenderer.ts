@@ -6,7 +6,6 @@ import { useStore } from '../store/useStore';
 // as a fallback if you ever want to render without the .glb asset.
 import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateHeadTop, updateEnclosingMask } from '../filters/props/sunglasses';
 import { createClownNose, createClownHair, updateClownNose, updateClownHair } from '../filters/props/clown';
-import { createDisguise } from '../filters/props/disguise3d';
 import type { LandmarkList } from '../types';
 
 type Updater = (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number) => void;
@@ -35,6 +34,90 @@ function horseColor(x: number, y: number, z: number): [number, number, number] {
   return [r, g, b];
 }
 
+// ── Hund 2 tongue animation ───────────────────────────────────────────────
+// The painted dog GLB is split into "Ears"/"Body"/"Tongue" nodes (see
+// tools/build_dog2.mjs). Like the 2D "Hund" filter, the tongue grows/shrinks
+// with how wide the person opens their mouth. We scale the Tongue node and pivot
+// the scale at the tongue's TOP (its mouth attachment) by compensating position,
+// so it extends downward out of the mouth instead of scaling about the origin.
+type TongueData = {
+  obj: THREE.Object3D;
+  P: THREE.Vector3;            // pivot (tongue top) in the node's local space
+  scale0: THREE.Vector3;       // node scale as loaded (incl. quantisation scale)
+  cur: number;                 // smoothed scale factor
+  peak: number;                // largest factor reached during the current open mouth
+  open: boolean;               // hysteresis latch: true between the open and close thresholds
+};
+const tongueCache = new WeakMap<THREE.Object3D, TongueData>();
+const tmpMouth = new THREE.Vector3();
+
+function applyDogTongue(prop: THREE.Object3D, lm: LandmarkList, W: number, H: number) {
+  let data = tongueCache.get(prop);
+  if (!data) {
+    const obj = prop.getObjectByName('Tongue');
+    if (!obj) return;   // GLB still streaming in
+    const mesh = obj as THREE.Mesh;
+    const P = new THREE.Vector3();
+    if (mesh.geometry) {
+      mesh.geometry.computeBoundingBox();
+      const bb = mesh.geometry.boundingBox!;
+      P.set((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
+    }
+    data = { obj, P, scale0: obj.scale.clone(), cur: 1, peak: 0, open: false };
+    tongueCache.set(prop, data);
+  }
+
+  // Mouth openness: inner-lip gap normalised by face height (scale-independent).
+  const gap = Math.abs(lm[13].y - lm[14].y);
+  const faceH = Math.abs(lm[10].y - lm[152].y) || 1;
+  const ratio = gap / faceH;
+
+  // Hysteresis: the mouth counts as "open" once it passes OPEN_T, and stays open
+  // until it closes well below that (CLOSE_T). This stops threshold jitter from
+  // momentarily resetting the tongue (which previously let it shrink/flicker).
+  const OPEN_T = 0.06, CLOSE_T = 0.025;
+  if (!data.open && ratio > OPEN_T) data.open = true;
+  else if (data.open && ratio < CLOSE_T) { data.open = false; data.peak = 0; }
+
+  // While open, the tongue pops to its start size and grows to at most 1.4× of that
+  // start size at a fully open mouth. It RATCHETS: peak only ever increases while the
+  // mouth stays open, so once grown it never shrinks back — and never below the start
+  // size. It only resets (→ hidden) once the mouth truly closes.
+  const START = 0.9;    // tongue start size
+  if (data.open) {
+    const ext = Math.max(0, Math.min(1, (ratio - CLOSE_T) / 0.30));
+    data.peak = Math.max(data.peak, START * (1 + 0.4 * ext));
+  }
+  data.cur += (data.peak - data.cur) * 0.4;   // smooth to avoid jitter
+
+  const { obj, P, scale0, cur } = data;
+  obj.visible = cur > 0.05;                    // fully hide the tongue with a closed mouth
+  obj.scale.set(scale0.x * cur, scale0.y * cur, scale0.z * cur);
+
+  // Anchor the tongue's TOP at the mouth centre — midway between the upper inner lip
+  // (13) and lower inner lip (14) — so it always starts between the lips no matter
+  // how the rigid dog mask is aligned. Landmark→world uses the same mapping as
+  // updateMask. A small forward (+Z, toward camera) nudge keeps it off the chin.
+  const ux = (1 - lm[13].x) * W - W / 2, uy = -(lm[13].y * H - H / 2), uz = -(lm[13].z ?? 0) * W;
+  const dx = (1 - lm[14].x) * W - W / 2, dy = -(lm[14].y * H - H / 2), dz = -(lm[14].z ?? 0) * W;
+  const clx = (1 - lm[234].x) * W - W / 2, cly = -(lm[234].y * H - H / 2);
+  const crx = (1 - lm[454].x) * W - W / 2, cry = -(lm[454].y * H - H / 2);
+  const faceWidth = Math.hypot(crx - clx, cry - cly);
+  tmpMouth.set((ux + dx) / 2, (uy + dy) / 2, (uz + dz) / 2 + faceWidth * 0.18);
+
+  const parent = obj.parent;
+  if (parent) {
+    parent.updateWorldMatrix(true, false);
+    parent.worldToLocal(tmpMouth);            // mouth centre → tongue's local space
+    // Place the node so its pivot (tongue top P) lands exactly on the mouth centre.
+    obj.position.set(
+      tmpMouth.x - obj.scale.x * P.x,
+      tmpMouth.y - obj.scale.y * P.y,
+      tmpMouth.z - obj.scale.z * P.z,
+    );
+  }
+}
+
 // Which Three.js prop instance(s) each filter shows. A filter may use several
 // (the clown wears both a wig and a nose).
 const FILTER_PROPS: Record<string, string[]> = {
@@ -50,6 +133,7 @@ const FILTER_PROPS: Record<string, string[]> = {
   disguise:      ['disguise'],
   clown:         ['clown_hair', 'clown_nose'],
   bunny:         ['bunny_ears'],
+  dog2:          ['dog2'],
 };
 
 export function useThreeRenderer(
@@ -131,6 +215,8 @@ export function useThreeRenderer(
       batman2:       `${import.meta.env.BASE_URL}models/Batman_mask.glb`,
       bunny_ears:    `${import.meta.env.BASE_URL}models/${encodeURIComponent('Bunny ears.glb')}`,
       horse:         `${import.meta.env.BASE_URL}models/Horse.glb`,
+      dog2:          `${import.meta.env.BASE_URL}models/Dog_Face_painted.glb`,
+      disguise:      `${import.meta.env.BASE_URL}models/Groucho_disguise.glb`,
     };
     // Factory + face-tracking updater for every prop instance type.
     const makeProp: Record<string, () => THREE.Object3D> = {
@@ -149,12 +235,15 @@ export function useThreeRenderer(
       // rotation. Coloured black; anchored on the eye line (see updateProp).
       batman2:       () => createSunglassesFromGLB(urls.batman2, { fit: 1.3, forceColor: 0x0a0a0a }),
       bunny_ears:    () => createSunglassesFromGLB(urls.bunny_ears, { fit: 1.0 }),
+      // Hund 2 — painted 3D dog face worn as a mask over the user's face.
+      dog2:          () => createSunglassesFromGLB(urls.dog2, { fit: 1.2 }),
       // Hest — closed 360° head that ENCLOSES the whole head: the horse head is
       // built clearly larger than the real head and pushed back (see
       // updateEnclosingMask) so the person's head sits INSIDE it like a helmet.
-      horse2:        () => createSunglassesFromGLB(urls.horse, { fit: 1.8, vertexColorFn: horseColor, offset: { y: 2 } }),
-      // Groucho disguise — procedural 3D glasses + brows + nose + moustache.
-      disguise:      createDisguise,
+      horse2:        () => createSunglassesFromGLB(urls.horse, { fit: 1.8, vertexColorFn: horseColor, offset: { y: 1.25 } }),
+      // Groucho disguise — real 3D model (glasses + brows + nose + moustache),
+      // worn on the eye line like the other glasses props.
+      disguise:      () => createSunglassesFromGLB(urls.disguise, { fit: 1.0, pivotZFront: true }),
       clown_nose:    createClownNose,
       clown_hair:    createClownHair,
     };
@@ -171,8 +260,11 @@ export function useThreeRenderer(
       batman2:       updateEyeMask(0.37, 0.87),   // lifted to the eyes; 87% size so it fits the head
 
       bunny_ears:    updateBunnyEars,
-      // Anchored on the eye line so the lenses sit over the eyes.
-      disguise:      updateEyeMask(0, 1),
+      dog2:          updateMask,
+      // Same handling as the party glasses: lenses anchored on the eyes/nose
+      // bridge (so the two lens holes centre on the eyes) and the temple arms
+      // stretched backward toward the ears.
+      disguise:      (p, lm, W, H) => updateSunglasses(p, lm, W, H, { extraDrop: 0.175, zStretch: 3 }),
       clown_nose:    updateClownNose,
       clown_hair:    updateClownHair,
     };
@@ -278,6 +370,13 @@ export function useThreeRenderer(
             pool[i].visible = true;
           }
         }
+      }
+
+      // Hund 2: animate each visible dog tongue to the wearer's mouth openness.
+      if (f === 'dog2') {
+        const pool = props.dog2;
+        const count = Math.min(faces.length, pool.length);
+        for (let i = 0; i < count; i++) applyDogTongue(pool[i], faces[i], vW, vH);
       }
 
       // Party glasses: cycle the whole model through the colour wheel over time,

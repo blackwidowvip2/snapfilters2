@@ -21,5 +21,5 @@ function ensureImage() {
 export function drawAgfFan(d: DrawCtx): void {
   ensureImage();
   if (!ready || !img) return;
-  paintOnCheeks(d, img, { mirror: false, tilt: 0.26, inward: 0.15, heightScale: 0.525, opacity: 0.75 });
+  paintOnCheeks(d, img, { flipCheek: 'none', tilt: 0.16, inward: 0.15, heightScale: 0.525, opacity: 0.75 });
 }

@@ -335,7 +335,9 @@ export function updateSunglasses(
   prop: THREE.Object3D,
   lm: LandmarkList,
   W: number, H: number,
+  opts: { extraDrop?: number; zStretch?: number } = {},
 ): void {
+  const { extraDrop = 0, zStretch = 2.6 } = opts;
   const pt = (idx: number) => ({
     x:  (1 - lm[idx].x) * W - W / 2,
     y: -(lm[idx].y * H - H / 2),
@@ -378,8 +380,10 @@ export function updateSunglasses(
   // Lower the glasses from the bridge toward the nose tip so the nose pads (the
   // two white pads at the centre of the lenses) rest ON the nose. Interpolating
   // along bridge→nose keeps the drop aligned with the face when the head tilts.
-  const dropX = (noseTip.x - bridge.x) * 0.28;
-  const dropY = (noseTip.y - bridge.y) * 0.28;
+  // `extraDrop` slides it further down the bridge→nose axis (used by the Groucho
+  // disguise so the lens holes sit lower, centred on the eyes).
+  const dropX = (noseTip.x - bridge.x) * (0.28 + extraDrop);
+  const dropY = (noseTip.y - bridge.y) * (0.28 + extraDrop);
 
   // Lenses sit just in FRONT of the face so they clear the head occluder (see
   // updateHeadOccluder) — the occluder then hides the temple arms / far lens that
@@ -395,7 +399,7 @@ export function updateSunglasses(
   // (Z) axis so the temple arms — which run backward from the lens-plane pivot —
   // reach much further back, ending behind the ears, while the lenses keep size.
   const sc = faceWidth / MODEL_REF_WIDTH;
-  prop.scale.set(sc, sc, sc * 2.6);
+  prop.scale.set(sc, sc, sc * zStretch);
 }
 
 // ════════════════════════════════════════════════════════════════════════

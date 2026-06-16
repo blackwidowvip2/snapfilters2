@@ -1,0 +1,19 @@
+{
+  "name": "SnapFilters",
+  "short_name": "SnapFilters",
+  "description": "Sjove ansigtsfiltre i realtid via kameraet.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
