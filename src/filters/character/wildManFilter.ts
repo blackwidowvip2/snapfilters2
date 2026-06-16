@@ -31,6 +31,8 @@ const HOLE_DOWN = -0.1;
 const HOLE_OUT  = 0.07;
 // Stamped iris size, as a multiple of the measured iris radius.
 const IRIS_PAD = 1.15;
+// Magnify the person's eye when stamping it in (and the hole) — 2.0 = 100% bigger.
+const EYE_MAG = 2.0;
 
 let img: HTMLImageElement | null = null;
 let ready = false;
@@ -126,7 +128,8 @@ export function drawWildMan(d: DrawCtx): void {
   for (const [iris, sign] of [[LEFT_IRIS, -1], [RIGHT_IRIS, 1]] as const) {
     const c = d.pt(iris.center);
     const r = d.pt(iris.ring);
-    const radius = Math.hypot(r.x - c.x, r.y - c.y) * IRIS_PAD;
+    // Hole grows with the magnified eye so the bigger iris fits inside it.
+    const radius = Math.hypot(r.x - c.x, r.y - c.y) * IRIS_PAD * EYE_MAG;
     // Where the cartoon's iris sits: from the real iris, push down the face and
     // outward (away from centre) along the eye line.
     const hx = c.x + eyeUx * sign * HOLE_OUT * realDist + downX * HOLE_DOWN * realDist;
@@ -135,8 +138,12 @@ export function drawWildMan(d: DrawCtx): void {
     octx.beginPath();
     octx.ellipse(hx, hy, radius, radius, 0, 0, Math.PI * 2);
     octx.clip();
-    // Copy the live canvas so the real iris (at c) lands at the cartoon iris (h).
-    octx.drawImage(ctx.canvas, hx - c.x, hy - c.y);
+    // Copy the live canvas, magnified by EYE_MAG around the iris centre, so the
+    // person's eye (at c) lands enlarged at the cartoon iris (h).
+    octx.translate(hx, hy);
+    octx.scale(EYE_MAG, EYE_MAG);
+    octx.translate(-c.x, -c.y);
+    octx.drawImage(ctx.canvas, 0, 0);
     octx.restore();
   }
 

@@ -15,6 +15,12 @@ import { drawWildMan } from './character/wildManFilter';
 import { drawAgfFan } from './props/agfFan';
 import { drawDenmarkFan } from './props/denmarkFan';
 import { pxBigEyes, pxBigMouth, pxWideLips, pxAlienHead, pxVerticalScale, pxSlimFace, pxSwirlFace, pxSadMouth, drawThirdEye } from './character/index';
+import { pxAniso, pxJelly, pxSlowJelly, pxBlockify, pxTaper, pxExplode } from './distort2/warps';
+
+// Head-motion tracker for the "jelly bounce" filter: movement of the face centre
+// pumps a wobble energy that decays each frame, so a head shake makes the face
+// jiggle and then settle.
+let lastFaceX = 0, lastFaceY = 0, wobbleEnergy = 0;
 import { drawNeonOverlay, drawCyberpunk, drawCartoon, drawNoir, drawWatercolor, drawOilPaint, drawNightVision, drawHologram, drawInfrared, drawNeonOutline } from './style/index';
 import type { LandmarkList } from '../types';
 
@@ -165,11 +171,11 @@ export function applyOverlayFilter(
         const lipH   = Math.hypot(lo.x - up.x, lo.y - up.y);
         const rx = mouthW * 1.45;
         const ry = Math.max(lipH * 0.7, d.s * 0.075);
-        // ax = 1 - 1/7.0 = 0.857 → ×0.7 → 0.6 → ×0.85 → 0.51 → scaleX = 1/(1-0.51) ≈ 2.04
-        // ay = 1 - 1/1.7 = 0.412 → ×0.7 → 0.288 → ×0.85 → 0.245 → scaleY = 1/(1-0.245) ≈ 1.32
+        // A further 15% smaller: ax 0.51→0.4335 → scaleX ≈ 1.77;
+        // ay 0.245→0.208 → scaleY ≈ 1.26.
         try {
           const id2 = ctx.getImageData(0, 0, W, H);
-          const warped = pxWideLips(id2.data, W, H, mc.x, mc.y, rx, ry, 2.04, 1.32);
+          const warped = pxWideLips(id2.data, W, H, mc.x, mc.y, rx, ry, 1.77, 1.26);
           ctx.putImageData(warped, 0, 0);
         } catch (_) { /* taint guard */ }
       }
@@ -349,6 +355,255 @@ export function applyOverlayFilter(
       }
       break;
     }
+    // ── Forvrængning 2 ──────────────────────────────────────────────────
+    case 'micro_nose': {
+      if (d) {
+        const nose = d.pt(1);
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxAniso(id2.data, W, H, nose.x, nose.y, d.s * 0.55, d.s * 0.6, 0.5, 0.5, 0.15);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'tiny_eyes': {
+      if (d) {
+        const eyes = [d.eyeCenter('left'), d.eyeCenter('right')];
+        const eyeDist = Math.hypot(eyes[1].x - eyes[0].x, eyes[1].y - eyes[0].y);
+        const r = Math.min(d.s * 0.42, eyeDist * 0.46);
+        try {
+          for (const e of eyes) {
+            const id2 = ctx.getImageData(0, 0, W, H);
+            const warped = pxAniso(id2.data, W, H, e.x, e.y, r, r, 0.5, 0.5, 0.2);
+            ctx.putImageData(warped, 0, 0);
+          }
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'bobblehead': {
+      // Enlarge the whole head and make it bob/sway like a bobblehead toy.
+      if (d) {
+        const brow = d.pt(10), chin = d.pt(152);
+        const faceH = Math.max(1, Math.abs(chin.y - brow.y));
+        const cx = d.faceCenter().x + Math.sin(t * 5) * d.s * 0.05;
+        const cy = (brow.y + chin.y) / 2 + Math.sin(t * 5 + 1) * d.s * 0.04;
+        const sc = 1.42 + Math.sin(t * 5) * 0.08;
+        const R = faceH * 1.0;
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxAniso(id2.data, W, H, cx, cy, R, R, sc, sc, 0.18);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'mini_head': {
+      // Shrink the whole head into a tiny head.
+      if (d) {
+        const brow = d.pt(10), chin = d.pt(152);
+        const faceH = Math.max(1, Math.abs(chin.y - brow.y));
+        const cx = d.faceCenter().x, cy = (brow.y + chin.y) / 2;
+        const R = faceH * 1.05;
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxAniso(id2.data, W, H, cx, cy, R, R, 0.6, 0.6, 0.1);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'jelly_face': {
+      // The whole face ripples like jelly.
+      if (d) {
+        const fh = d.pt(10), chin = d.pt(152);
+        const faceH = Math.max(1, Math.abs(chin.y - fh.y));
+        const cx = d.faceCenter().x, cy = (fh.y + chin.y) / 2;
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxJelly(id2.data, W, H, cx, cy, faceH * 0.9, t, d.s * 0.06, 0.06, 6);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'jelly_slowmo': {
+      // The face sloshes slowly as if suspended in thick gel.
+      if (d) {
+        const fh = d.pt(10), chin = d.pt(152);
+        const faceH = Math.max(1, Math.abs(chin.y - fh.y));
+        const cx = d.faceCenter().x, cy = (fh.y + chin.y) / 2;
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxSlowJelly(id2.data, W, H, cx, cy, faceH * 1.0, t, d.s * 0.11);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'minecraft_face': {
+      // Turn the WHOLE head (incl. the crown/hair) into chunky Minecraft cubes.
+      if (d) {
+        const fh = d.pt(10), chin = d.pt(152);
+        const cheekL = d.pt(234), cheekR = d.pt(454);
+        const faceWidth = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
+        // Extend the region well above the forehead to take in the crown/hair.
+        const headTop = { x: fh.x + (fh.x - chin.x) * 0.85, y: fh.y + (fh.y - chin.y) * 0.85 };
+        const cx = (headTop.x + chin.x) / 2, cy = (headTop.y + chin.y) / 2;
+        const ry = (Math.hypot(headTop.x - chin.x, headTop.y - chin.y) / 2) * 1.06;
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxBlockify(id2.data, W, H, cx, cy, faceWidth * 0.82, ry, Math.max(6, d.s * 0.13), d.angle);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'triangle_face': {
+      // Taper the face to a point at the chin → triangular. The region covers the
+      // WHOLE head (incl. crown) so none of the un-warped face shows around it.
+      if (d) {
+        const fh = d.pt(10), chin = d.pt(152);
+        const cheekL = d.pt(234), cheekR = d.pt(454);
+        const faceWidth = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
+        const headTop = { x: fh.x + (fh.x - chin.x) * 0.85, y: fh.y + (fh.y - chin.y) * 0.85 };
+        const cx = (headTop.x + chin.x) / 2, cy = (headTop.y + chin.y) / 2;
+        const ry = (Math.hypot(headTop.x - chin.x, headTop.y - chin.y) / 2) * 1.06;
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxTaper(id2.data, W, H, cx, cy, faceWidth * 0.85, ry, 1.0, 0.28, d.angle);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+
+    case 'face_explode': {
+      // The face bursts outward and reassembles on a ~2.6s loop.
+      if (d) {
+        const fh = d.pt(10), chin = d.pt(152);
+        const faceH = Math.max(1, Math.abs(chin.y - fh.y));
+        const cx = d.faceCenter().x, cy = (fh.y + chin.y) / 2;
+        const phase = (t % 2.6) / 2.6;            // 0 … 1
+        const push = Math.max(0, Math.sin(phase * Math.PI)) * 0.6;
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxExplode(id2.data, W, H, cx, cy, faceH * 1.05, push);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'elastic_smile': {
+      // Smiling stretches the face like elastic; neutral = no effect.
+      if (d) {
+        const mc = d.mouthCenter();
+        const mL = d.pt(61), mR = d.pt(291);
+        const up = d.pt(13), lo = d.pt(14);       // inner lips (openness)
+        const lEye = d.eyeCenter('left'), rEye = d.eyeCenter('right');
+        const eyeDist = Math.max(1, Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y));
+        const mouthW = Math.hypot(mR.x - mL.x, mR.y - mL.y);
+        const openness = Math.hypot(lo.x - up.x, lo.y - up.y) / eyeDist;
+        // Smile = wide mouth (and/or open). 0 at neutral → 1 at a big grin.
+        const smile = Math.max(0, Math.min(1, (mouthW / eyeDist - 1.0) / 0.45 + openness * 0.6));
+        if (smile > 0.02) {
+          const bounce = 1 + 0.12 * Math.sin(t * 13);
+          // Cover the WHOLE mouth — from the top of the upper lip to the bottom of
+          // the lower lip — so the entire lower lip stretches too.
+          const lipTop = d.pt(0), lipBot = d.pt(17);
+          const lipsCy = (lipTop.y + lipBot.y) / 2;
+          const lipsRy = Math.max(Math.abs(lipBot.y - lipTop.y) * 0.95, d.s * 0.16);
+          try {
+            // Stretch the grin wide + a little taller, with an elastic bounce.
+            let id2 = ctx.getImageData(0, 0, W, H);
+            let warped = pxWideLips(id2.data, W, H, mc.x, lipsCy, mouthW * 1.0, lipsRy,
+              1 + smile * 1.0 * bounce, 1 + smile * 0.35 * bounce);
+            ctx.putImageData(warped, 0, 0);
+            // Stretch the lower face downward elastically.
+            const chin = d.pt(152);
+            const eyeY = (lEye.y + rEye.y) / 2;
+            const L = Math.max(1, Math.abs(chin.y - eyeY));
+            id2 = ctx.getImageData(0, 0, W, H);
+            warped = pxVerticalScale(id2.data, W, H, d.faceCenter().x, d.s * 2.0, eyeY, 1, L, 1 + smile * 0.35 * bounce);
+            ctx.putImageData(warped, 0, 0);
+          } catch (_) { /* taint guard */ }
+        }
+      }
+      break;
+    }
+    case 'jelly_bounce': {
+      // The face jiggles like jelly in response to head movement.
+      if (d) {
+        const fh = d.pt(10), chin = d.pt(152);
+        const faceH = Math.max(1, Math.abs(chin.y - fh.y));
+        const fc = d.faceCenter();
+        const cx = fc.x, cy = (fh.y + chin.y) / 2;
+        // Pump energy from how far the head moved since last frame (normalised),
+        // and let it decay so the wobble fades after motion stops.
+        const motion = Math.hypot(fc.x - lastFaceX, fc.y - lastFaceY) / d.s;
+        lastFaceX = fc.x; lastFaceY = fc.y;
+        wobbleEnergy = Math.max(wobbleEnergy * 0.9, Math.min(1.2, motion * 3));
+        if (wobbleEnergy > 0.02) {
+          try {
+            const id2 = ctx.getImageData(0, 0, W, H);
+            const warped = pxJelly(id2.data, W, H, cx, cy, faceH * 0.95, t, d.s * 0.09 * wobbleEnergy, 0.07, 16);
+            ctx.putImageData(warped, 0, 0);
+          } catch (_) { /* taint guard */ }
+        }
+      }
+      break;
+    }
+    case 'big_eyes_mini_mouth': {
+      // Huge eyes paired with a tiny mouth.
+      if (d) {
+        const lEye = d.eyeCenter('left'), rEye = d.eyeCenter('right');
+        const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+        const eyeR = Math.min(d.s * 0.6, eyeDist * 0.5);
+        const mc = d.mouthCenter();
+        const mL = d.pt(61), mR = d.pt(291);
+        const mouthW = Math.hypot(mR.x - mL.x, mR.y - mL.y);
+        try {
+          let id2 = ctx.getImageData(0, 0, W, H);
+          let warped = pxBigEyes(id2.data, W, H, [lEye, rEye], eyeR, 1.8);
+          ctx.putImageData(warped, 0, 0);
+          id2 = ctx.getImageData(0, 0, W, H);
+          warped = pxAniso(id2.data, W, H, mc.x, mc.y, Math.max(d.s * 0.45, mouthW * 0.85), d.s * 0.2, 0.5, 0.5, 0.2);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'inverse_face': {
+      // The opposite proportions: big mouth, small eyes, small nose.
+      if (d) {
+        const lEye = d.eyeCenter('left'), rEye = d.eyeCenter('right');
+        const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y);
+        const eyeR = Math.min(d.s * 0.42, eyeDist * 0.46);
+        const mc = d.mouthCenter();
+        const mL = d.pt(61), mR = d.pt(291);
+        const mouthW = Math.hypot(mR.x - mL.x, mR.y - mL.y);
+        const nose = d.pt(1);
+        try {
+          // big mouth
+          let id2 = ctx.getImageData(0, 0, W, H);
+          let warped = pxBigMouth(id2.data, W, H, mc.x, mc.y, Math.max(d.s * 0.7, mouthW * 1.25), 2.2);
+          ctx.putImageData(warped, 0, 0);
+          // small eyes
+          for (const e of [lEye, rEye]) {
+            id2 = ctx.getImageData(0, 0, W, H);
+            warped = pxAniso(id2.data, W, H, e.x, e.y, eyeR, eyeR, 0.55, 0.55, 0.2);
+            ctx.putImageData(warped, 0, 0);
+          }
+          // small nose
+          id2 = ctx.getImageData(0, 0, W, H);
+          warped = pxAniso(id2.data, W, H, nose.x, nose.y, d.s * 0.5, d.s * 0.55, 0.6, 0.6, 0.15);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+
     // Style overlays
     case 'neon':         d && drawNeonOverlay(d);  break;
     case 'neon_outline': d && drawNeonOutline(d);  break;

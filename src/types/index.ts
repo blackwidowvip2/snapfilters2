@@ -10,7 +10,7 @@ export interface FaceResults {
   multiFaceLandmarks: LandmarkList[];
 }
 
-export type FilterCategory = 'animal' | 'makeup' | 'character' | 'style' | 'effect' | 'props' | 'distortion';
+export type FilterCategory = 'animal' | 'makeup' | 'character' | 'style' | 'effect' | 'props' | 'distortion' | 'distortion2';
 
 export interface FilterDefinition {
   id: string;

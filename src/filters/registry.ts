@@ -5,6 +5,7 @@ export const FILTER_CATEGORIES = [
   { id: 'makeup'    as const, label: '💄 Makeup' },
   { id: 'character' as const, label: '👻 Karakter' },
   { id: 'distortion' as const, label: '🤪 Forvrængning' },
+  { id: 'distortion2' as const, label: '🌀 Forvrængning 2' },
   { id: 'style'     as const, label: '🎨 Stil' },
   { id: 'effect'    as const, label: '✨ Effekt' },
   { id: 'props'     as const, label: '🕶️ Props' },
@@ -71,6 +72,20 @@ export const FILTERS: FilterDefinition[] = [
   { id:'swirl_face',      label:'Hvirvel',      icon:'🌀', category:'distortion', description:'Hvirvlende ansigtswarp' },
   { id:'sad_face',        label:'Ked Af Det',   icon:'😢', category:'distortion', description:'Mundvigene trækkes nedad — altid trist' },
   { id:'melt_face',       label:'Smeltet Ansigt', icon:'🫠', category:'distortion', description:'Ansigtet smelter ned med dryppende warp-effekt' },
+  // Forvrængning 2
+  { id:'micro_nose',      label:'Mikro-næse',     icon:'👃', category:'distortion2', description:'Næsen skrumper til en lillebitte knap' },
+  { id:'tiny_eyes',       label:'Små øjne',       icon:'👀', category:'distortion2', description:'Øjnene krymper til små prikker' },
+  { id:'bobblehead',      label:'Bobblehead',     icon:'🗿', category:'distortion2', description:'Kæmpe hoved der bobler og svajer' },
+  { id:'mini_head',       label:'Mini-hoved',     icon:'🤏', category:'distortion2', description:'Hovedet skrumper til et lille mini-hoved' },
+  { id:'jelly_face',      label:'Gelé-ansigt',    icon:'🍮', category:'distortion2', description:'Ansigtet bølger som gelé' },
+  { id:'jelly_slowmo',    label:'Slow-mo Gelé',   icon:'🌊', category:'distortion2', description:'Ansigtet skvulper langsomt i tyk gelé' },
+  { id:'minecraft_face',  label:'Minecraft',      icon:'🧱', category:'distortion2', description:'Hele ansigtet inkl. issen bliver firkantet som en Minecraft-figur' },
+  { id:'triangle_face',   label:'Trekant-ansigt', icon:'🔺', category:'distortion2', description:'Ansigtet trækkes ud i en trekant' },
+  { id:'face_explode',    label:'Eksploder',      icon:'💥', category:'distortion2', description:'Ansigtet eksploderer udad og samles igen' },
+  { id:'elastic_smile',   label:'Elastik-smil',   icon:'😁', category:'distortion2', description:'Ansigtet strækkes elastisk når du smiler' },
+  { id:'jelly_bounce',    label:'Gelé-hop',       icon:'🫨', category:'distortion2', description:'Ansigtet hopper som gelé ved hovedbevægelser' },
+  { id:'big_eyes_mini_mouth', label:'Store Øjne + Mini-mund', icon:'😳', category:'distortion2', description:'Kæmpe øjne og en lillebitte mund' },
+  { id:'inverse_face',    label:'Omvendt Ansigt', icon:'🙃', category:'distortion2', description:'Stor mund, små øjne og lille næse' },
 ];
 
 export const ALL_FILTERS: FilterDefinition[] = [
