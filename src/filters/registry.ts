@@ -37,6 +37,7 @@ export const FILTERS: FilterDefinition[] = [
   { id:'neon',             label:'Neon',         icon:'⚡', category:'style',    description:'Farverige kantlinjer på mørk baggrund' },
   { id:'neon_outline',    label:'Neon Kontur',  icon:'🌈', category:'style',    description:'Glødende neon-kontur langs ansigtslandmarks' },
   { id:'neon_dark',       label:'Neon Mørk',    icon:'🌑', category:'style',    description:'Helt sort baggrund med lysende neon-ansigtskontur' },
+  { id:'neon_body',       label:'Neon Krop',    icon:'🕺', category:'style',    description:'Helt sort baggrund hvor hele kroppen lyser i neon' },
   { id:'pencil_sketch',   label:'Blyantskitse', icon:'✏️', category:'style',    description:'Hvid baggrund med mørke blyantstreger' },
   { id:'cyberpunk',        label:'Cyberpunk',    icon:'🤖', category:'style',    description:'HUD-ringe, kredsløb og scanning' },
   { id:'cartoon',          label:'Tegneserie',   icon:'🎨', category:'style',    description:'Fed omrids og halvtone-rødme' },
@@ -53,6 +54,7 @@ export const FILTERS: FilterDefinition[] = [
   // Props (3D via Three.js)
   { id:'sunglasses',       label:'Solbriller',   icon:'🕶️', category:'props',    description:'3D solbriller med glas-refleksion' },
   { id:'party_glasses',    label:'Party Briller', icon:'🥳', category:'props',    description:'3D party-briller' },
+  { id:'ski_goggles',      label:'Skibriller',    icon:'🥽', category:'props',    description:'3D skibriller med pink stel og spejlglas' },
   { id:'agf_cap',          label:'AGF Kasket',    icon:'🧢', category:'props',    description:'3D AGF-kasket ovenpå hovedet' },
   { id:'agf_cap_logo',     label:'AGF Kasket Logo', icon:'🧢', category:'props',  description:'Hvid kasket med AGF-byvåben på fronten' },
   { id:'agf_fan',          label:'AGF Fan',       icon:'🔴', category:'props',    description:'AGF-logo malet på begge kinder' },

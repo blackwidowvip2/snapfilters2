@@ -22,6 +22,7 @@ import { pxAniso, pxJelly, pxSlowJelly, pxBlockify, pxTaper, pxExplode } from '.
 // jiggle and then settle.
 let lastFaceX = 0, lastFaceY = 0, wobbleEnergy = 0;
 import { drawNeonOverlay, drawCyberpunk, drawCartoon, drawNoir, drawWatercolor, drawOilPaint, drawNightVision, drawHologram, drawInfrared, drawNeonOutline } from './style/index';
+import { drawNeonBody } from './style/neonBody';
 import type { LandmarkList } from '../types';
 
 // Filters that skip pixel processing (canvas overlay only)
@@ -51,6 +52,7 @@ export function applyPixelFilter(
     switch (filterId) {
       case 'neon':         out = pxNeon(id.data, W, H, t);        break;
       case 'neon_dark':    out = pxBlack(W, H);                   break;
+      case 'neon_body':    out = pxNeon(id.data, W, H, t);        break;
       case 'glitch':       out = pxGlitch(id.data, W, H, t);      break;
       case 'thermal':      out = pxThermal(id.data, W, H);        break;
       case 'cyberpunk':    out = pxCyberpunk(id.data, W, H);      break;
@@ -608,6 +610,7 @@ export function applyOverlayFilter(
     case 'neon':         d && drawNeonOverlay(d);  break;
     case 'neon_outline': d && drawNeonOutline(d);  break;
     case 'neon_dark':    d && drawNeonOutline(d);  break;
+    case 'neon_body':    d && drawNeonBody(d);     break;
     case 'cyberpunk':    d && drawCyberpunk(d);   break;
     case 'cartoon':      d && drawCartoon(d);     break;
     case 'noir':         d && drawNoir(d);        break;

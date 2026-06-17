@@ -132,6 +132,7 @@ function applyDogTongue(prop: THREE.Object3D, lm: LandmarkList, W: number, H: nu
 const FILTER_PROPS: Record<string, string[]> = {
   sunglasses:    ['sunglasses'],
   party_glasses: ['party_glasses'],
+  ski_goggles:   ['ski_goggles'],
   anon_mask:     ['anon_mask'],
   anonymous_mask:['anonymous_mask'],
   ironman:       ['ironman'],
@@ -169,8 +170,24 @@ export function useThreeRenderer(
     // be composited into a captured photo (otherwise the buffer is cleared and
     // drawImage(threeCanvas) yields nothing).
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+    // Cap the WebGL drawing buffer's longest side. The camera/coordinate system is
+    // in video pixels (see the resize block) and the canvas is stretched to fill via
+    // CSS, so this only changes render resolution — NOT prop positioning. Without it,
+    // a high-res front camera (e.g. iPad's 12 MP Center-Stage cam) × devicePixelRatio
+    // produces a buffer large enough that iOS Safari silently fails the GL context,
+    // which made every 3D prop invisible on iPad 11 while 2D filters still worked.
+    const MAX_BUFFER_SIDE = 1536;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
+
+    // Surface (and allow recovery from) a lost GL context instead of failing silently.
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();   // preventDefault lets the browser attempt a restore
+      console.warn('[three] WebGL context lost — 3D props will be hidden until restored');
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      console.warn('[three] WebGL context restored');
+    });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -216,6 +233,7 @@ export function useThreeRenderer(
     const urls: Record<string, string> = {
       sunglasses:    `${import.meta.env.BASE_URL}models/sunglasses.glb`,
       party_glasses: `${import.meta.env.BASE_URL}models/${encodeURIComponent('Party Glasses.glb')}`,
+      ski_goggles:   `${import.meta.env.BASE_URL}models/Ski_goggles.glb`,
       anon_mask:     `${import.meta.env.BASE_URL}models/Anon_Mask.glb`,
       anonymous_mask:`${import.meta.env.BASE_URL}models/Anonymous_mask.glb`,
       ironman:       `${import.meta.env.BASE_URL}models/Ironman_Helmet.glb`,
@@ -231,6 +249,8 @@ export function useThreeRenderer(
     const makeProp: Record<string, () => THREE.Object3D> = {
       sunglasses:    () => createSunglassesFromGLB(urls.sunglasses, { fit: 1.0, pivotZFront: true }),
       party_glasses: () => createSunglassesFromGLB(urls.party_glasses, { fit: 1.0, pivotZFront: true }),
+      // Ski goggles — wide wrap-around shield; a touch larger than normal glasses.
+      ski_goggles:   () => createSunglassesFromGLB(urls.ski_goggles, { fit: 1.15, pivotZFront: true }),
       anon_mask:     () => createSunglassesFromGLB(urls.anon_mask, { fit: 1.0 }),
       // Nudged down so the mask's eye holes land on the person's eyes.
       anonymous_mask:() => createSunglassesFromGLB(urls.anonymous_mask, { fit: 1.0, hideNodes: ['Sphere'], offset: { y: -0.2 } }),
@@ -263,6 +283,7 @@ export function useThreeRenderer(
     const updateProp: Record<string, Updater> = {
       sunglasses:    updateSunglasses,
       party_glasses: updateSunglasses,
+      ski_goggles:   updateSunglasses,
       anon_mask:     updateMask,
       // This model turns opposite to the head with the standard yaw — invert it.
       anonymous_mask:(p, lm, W, H) => { updateMask(p, lm, W, H); p.rotation.y = -p.rotation.y; },
@@ -309,7 +330,7 @@ export function useThreeRenderer(
     }
     // Filters whose props wrap around the head and benefit from occlusion, so the
     // parts behind the head are hidden (depth blends instead of floating on top).
-    const NEEDS_OCCLUDER = new Set(['sunglasses', 'party_glasses', 'agf_cap', 'agf_cap_logo']);
+    const NEEDS_OCCLUDER = new Set(['sunglasses', 'party_glasses', 'ski_goggles', 'agf_cap', 'agf_cap_logo']);
 
     // ── Camera (orthographic — sized to video) ──────────────────────────
     const initW = 640, initH = 480;
@@ -349,6 +370,11 @@ export function useThreeRenderer(
       // canvas.width being modified by renderer.setSize itself on each check)
       if (vW !== lastW || vH !== lastH) {
         lastW = vW; lastH = vH;
+        // Cap the drawing buffer: pixelRatio so the longest side ≤ MAX_BUFFER_SIDE,
+        // never above 2 or the device ratio. setSize stays in video pixels (logical),
+        // only the backing-store resolution shrinks — CSS scales it back up.
+        const pr = Math.min(window.devicePixelRatio || 1, 2, MAX_BUFFER_SIDE / Math.max(vW, vH));
+        renderer.setPixelRatio(pr);
         renderer.setSize(vW, vH, false);
         camera.left   = -vW / 2;
         camera.right  =  vW / 2;

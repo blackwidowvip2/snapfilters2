@@ -69,7 +69,8 @@
       "Bash(node tools/shrink_groucho.mjs)",
       "Bash(node tools/shrink_groucho.mjs --render)",
       "Bash(node tools/build_dog2.mjs)",
-      "Bash(node tools/view_tongue.mjs)"
+      "Bash(node tools/view_tongue.mjs)",
+      "Bash(node tools/build_ski_goggles.mjs)"
     ]
   }
 }
