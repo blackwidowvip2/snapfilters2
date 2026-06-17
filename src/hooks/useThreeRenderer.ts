@@ -45,7 +45,6 @@ type TongueData = {
   P: THREE.Vector3;            // pivot (tongue top) in the node's local space
   scale0: THREE.Vector3;       // node scale as loaded (incl. quantisation scale)
   cur: number;                 // smoothed scale factor
-  peak: number;                // largest factor reached during the current open mouth
   open: boolean;               // hysteresis latch: true between the open and close thresholds
 };
 const tongueCache = new WeakMap<THREE.Object3D, TongueData>();
@@ -63,7 +62,7 @@ function applyDogTongue(prop: THREE.Object3D, lm: LandmarkList, W: number, H: nu
       const bb = mesh.geometry.boundingBox!;
       P.set((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
     }
-    data = { obj, P, scale0: obj.scale.clone(), cur: 1, peak: 0, open: false };
+    data = { obj, P, scale0: obj.scale.clone(), cur: 0, open: false };
     tongueCache.set(prop, data);
   }
 
@@ -77,33 +76,43 @@ function applyDogTongue(prop: THREE.Object3D, lm: LandmarkList, W: number, H: nu
   // momentarily resetting the tongue (which previously let it shrink/flicker).
   const OPEN_T = 0.06, CLOSE_T = 0.025;
   if (!data.open && ratio > OPEN_T) data.open = true;
-  else if (data.open && ratio < CLOSE_T) { data.open = false; data.peak = 0; }
+  else if (data.open && ratio < CLOSE_T) data.open = false;
 
-  // While open, the tongue pops to its start size and grows to at most 1.4× of that
-  // start size at a fully open mouth. It RATCHETS: peak only ever increases while the
-  // mouth stays open, so once grown it never shrinks back — and never below the start
-  // size. It only resets (→ hidden) once the mouth truly closes.
-  const START = 0.9;    // tongue start size
+  // While open, the tongue tracks the mouth opening BOTH ways: it grows as the mouth
+  // opens wider (up to 1.8× the start size) and shrinks back as the mouth narrows —
+  // but never below the start size. It only drops to 0 (→ hidden) once the mouth
+  // truly closes (hysteresis below CLOSE_T).
+  const START = 0.72;   // tongue start size
   if (data.open) {
     const ext = Math.max(0, Math.min(1, (ratio - CLOSE_T) / 0.30));
-    data.peak = Math.max(data.peak, START * (1 + 0.4 * ext));
+    const target = START * (1 + 0.8 * ext);
+    data.cur += (target - data.cur) * 0.4;   // smooth grow/shrink, never below START
+  } else {
+    // Mouth closed: the tongue disappears immediately at its start size instead of
+    // smoothly shrinking down through a tiny tongue and fading out.
+    data.cur = 0;
   }
-  data.cur += (data.peak - data.cur) * 0.4;   // smooth to avoid jitter
 
   const { obj, P, scale0, cur } = data;
   obj.visible = cur > 0.05;                    // fully hide the tongue with a closed mouth
   obj.scale.set(scale0.x * cur, scale0.y * cur, scale0.z * cur);
 
-  // Anchor the tongue's TOP at the mouth centre — midway between the upper inner lip
-  // (13) and lower inner lip (14) — so it always starts between the lips no matter
-  // how the rigid dog mask is aligned. Landmark→world uses the same mapping as
-  // updateMask. A small forward (+Z, toward camera) nudge keeps it off the chin.
+  // Anchor the tongue's TOP just under the UPPER lip: a point biased toward the
+  // upper inner lip (13), only slightly toward the lower inner lip (14), so the
+  // tongue starts close beneath the upper lip regardless of how the rigid dog mask
+  // is aligned. Landmark→world uses the same mapping as updateMask. A small forward
+  // (+Z, toward camera) nudge keeps it off the chin.
+  const LIP = 0.15;   // 0 = on the upper lip, 1 = on the lower lip
   const ux = (1 - lm[13].x) * W - W / 2, uy = -(lm[13].y * H - H / 2), uz = -(lm[13].z ?? 0) * W;
   const dx = (1 - lm[14].x) * W - W / 2, dy = -(lm[14].y * H - H / 2), dz = -(lm[14].z ?? 0) * W;
   const clx = (1 - lm[234].x) * W - W / 2, cly = -(lm[234].y * H - H / 2);
   const crx = (1 - lm[454].x) * W - W / 2, cry = -(lm[454].y * H - H / 2);
   const faceWidth = Math.hypot(crx - clx, cry - cly);
-  tmpMouth.set((ux + dx) / 2, (uy + dy) / 2, (uz + dz) / 2 + faceWidth * 0.18);
+  tmpMouth.set(
+    ux + (dx - ux) * LIP,
+    uy + (dy - uy) * LIP,
+    uz + (dz - uz) * LIP + faceWidth * 0.18,
+  );
 
   const parent = obj.parent;
   if (parent) {
@@ -242,8 +251,12 @@ export function useThreeRenderer(
       // updateEnclosingMask) so the person's head sits INSIDE it like a helmet.
       horse2:        () => createSunglassesFromGLB(urls.horse, { fit: 1.8, vertexColorFn: horseColor, offset: { y: 1.25 } }),
       // Groucho disguise — real 3D model (glasses + brows + nose + moustache),
-      // worn on the eye line like the other glasses props.
-      disguise:      () => createSunglassesFromGLB(urls.disguise, { fit: 1.0, pivotZFront: true }),
+      // worn on the eye line like the other glasses props. offset.y lowers the
+      // model so its LENS CENTRES (which sit ~0.123 model-units above the bbox
+      // centre, because of the eyebrows up top) land on the anchor — i.e. on the
+      // eyes — like the normal glasses. 0.123 × creation scale (0.94·5.4/2 =
+      // 2.538) ≈ 0.31.
+      disguise:      () => createSunglassesFromGLB(urls.disguise, { fit: 0.94, pivotZFront: true, offset: { x: -0.2, y: -0.31 } }),
       clown_nose:    createClownNose,
       clown_hair:    createClownHair,
     };
@@ -264,7 +277,7 @@ export function useThreeRenderer(
       // Same handling as the party glasses: lenses anchored on the eyes/nose
       // bridge (so the two lens holes centre on the eyes) and the temple arms
       // stretched backward toward the ears.
-      disguise:      (p, lm, W, H) => updateSunglasses(p, lm, W, H, { extraDrop: 0.175, zStretch: 3 }),
+      disguise:      (p, lm, W, H) => updateSunglasses(p, lm, W, H, { zStretch: 3 }),
       clown_nose:    updateClownNose,
       clown_hair:    updateClownHair,
     };

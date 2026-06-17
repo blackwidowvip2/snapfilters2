@@ -11,7 +11,7 @@
 // has the Meshopt decoder wired up).
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression, KHRMeshQuantization } from '@gltf-transform/extensions';
-import { meshopt, textureCompress, weld, dedup, prune, simplify } from '@gltf-transform/functions';
+import { meshopt, textureCompress, weld, dedup, prune } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
@@ -23,7 +23,10 @@ const SLIVER_X = 0.35;                   // drop muzzle triangles right of this 
 const EARS_LIFT = 0.65;                  // ears up
 const BODY_LIFT = 0.50;                  // muzzle/nose up
 const TONGUE_DROP = -0.30;               // tongue start well ABOVE its attach (above the mouth middle)
-const SIMPLIFY_RATIO = 0.5;              // keep ~50% of triangles (smaller file, faster load)
+const SIMPLIFY_RATIO = 0.5;              // ears/muzzle: keep ~50% of triangles
+const TONGUE_RATIO = 0.22;              // tongue: keep ~22% — it's small & partly hidden,
+                                        // so it tolerates far heavier reduction with no
+                                        // visible loss, shrinking the file further.
 
 await MeshoptEncoder.ready;
 await MeshoptDecoder.ready;
@@ -88,6 +91,35 @@ for (const vi of regions.Tongue) {
 }
 const pivot = [0, tMaxY, tzSum / tCount];
 
+// Per-region simplification. The mesh is a triangle-soup (no shared vertices), so
+// we build a position-only weld to give the simplifier real topology, run the
+// Meshopt simplifier on it, then map the surviving triangles back to the original
+// vertices (preserving their normals/UVs — only coincident duplicates are merged).
+// This lets the tongue be reduced far more than the ears/muzzle.
+function reducePrim(node, keepRatio) {
+  const p = node.getMesh().listPrimitives()[0];
+  const pos = p.getAttribute('POSITION');
+  const n = pos.getCount();
+  const v = [0, 0, 0];
+  const key2weld = new Map(); const weld2orig = []; const orig2weld = new Uint32Array(n); const wpos = [];
+  for (let i = 0; i < n; i++) {
+    pos.getElement(i, v);
+    const k = `${Math.round(v[0] * 8192)}_${Math.round(v[1] * 8192)}_${Math.round(v[2] * 8192)}`;
+    let w = key2weld.get(k);
+    if (w === undefined) { w = weld2orig.length; key2weld.set(k, w); weld2orig.push(i); wpos.push(v[0], v[1], v[2]); }
+    orig2weld[i] = w;
+  }
+  const oldIdx = p.getIndices().getArray();
+  const weldedIdx = new Uint32Array(oldIdx.length);
+  for (let i = 0; i < oldIdx.length; i++) weldedIdx[i] = orig2weld[oldIdx[i]];
+  const target = Math.max(3, Math.floor((oldIdx.length * keepRatio) / 3) * 3);
+  const [simp] = MeshoptSimplifier.simplify(weldedIdx, new Float32Array(wpos), 3, target, 0.05, ['LockBorder']);
+  const out = new Uint32Array(simp.length);
+  for (let i = 0; i < simp.length; i++) out[i] = weld2orig[simp[i]];
+  p.setIndices(doc.createAccessor().setType('SCALAR').setArray(out).setBuffer(buffer));
+  return { from: oldIdx.length / 3, to: out.length / 3 };
+}
+
 const scene = root.listScenes()[0];
 const earsNode = buildNode('Ears', regions.Ears, [0, -EARS_LIFT, 0]);
 const bodyNode = buildNode('Body', regions.Body, [0, -BODY_LIFT, 0]);
@@ -97,14 +129,17 @@ scene.addChild(earsNode).addChild(bodyNode).addChild(tongueNode);
 srcMesh.dispose();
 for (const n of root.listNodes()) if (!n.getMesh()) n.dispose();
 
+const rEars = reducePrim(earsNode, SIMPLIFY_RATIO);
+const rBody = reducePrim(bodyNode, SIMPLIFY_RATIO);
+const rTongue = reducePrim(tongueNode, TONGUE_RATIO);
+
 await doc.transform(
   weld(),
-  simplify({ simplifier: MeshoptSimplifier, ratio: SIMPLIFY_RATIO, error: 0.008 }),
   dedup(), prune(),
   meshopt({ encoder: MeshoptEncoder, level: 'high' }),
 );
 doc.createExtension(EXTMeshoptCompression).setRequired(true);
 doc.createExtension(KHRMeshQuantization).setRequired(true);
 await io.write(OUT, doc);
-console.log('tris:', { Ears: regions.Ears.length / 3, Body: regions.Body.length / 3, Tongue: regions.Tongue.length / 3 }, 'sliver dropped', dropped);
+console.log('tris reduced:', { Ears: rEars, Body: rBody, Tongue: rTongue }, 'sliver dropped', dropped);
 console.log('pivot', pivot.map(x => +x.toFixed(3)), '→ wrote', OUT);
