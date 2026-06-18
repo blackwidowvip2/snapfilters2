@@ -327,16 +327,51 @@ export function useThreeRenderer(
       clown_hair:    updateClownHair,
     };
 
+    // Prop pools are created LAZILY — only when a filter that needs them is
+    // selected — and disposed when no longer in use. Pre-creating 4 instances of
+    // every GLB prop at startup loaded far too much texture/geometry memory at
+    // once and crashed iOS Safari (tight WebGL memory limits); on-demand loading
+    // keeps only the active prop resident.
     const props: Record<string, THREE.Object3D[]> = {};
-    for (const id of Object.keys(makeProp)) {
-      props[id] = [];
+
+    const disposeMaterial = (mat: THREE.Material) => {
+      for (const k in mat) {
+        const val = (mat as unknown as Record<string, unknown>)[k];
+        if (val && (val as THREE.Texture).isTexture) (val as THREE.Texture).dispose();
+      }
+      mat.dispose();
+    };
+    const disposeInstance = (obj: THREE.Object3D) => {
+      obj.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const mat = mesh.material;
+        if (Array.isArray(mat)) mat.forEach(disposeMaterial);
+        else if (mat) disposeMaterial(mat as THREE.Material);
+      });
+      scene.remove(obj);
+    };
+    const ensurePool = (id: string): THREE.Object3D[] => {
+      let pool = props[id];
+      if (pool) return pool;
+      pool = [];
       for (let i = 0; i < POOL; i++) {
         const inst = makeProp[id]();
         inst.visible = false;
         scene.add(inst);
-        props[id].push(inst);
+        pool.push(inst);
       }
-    }
+      props[id] = pool;
+      return pool;
+    };
+    // Free every pool that the currently-active filter does not use.
+    const prunePools = (keep: string[]) => {
+      for (const id of Object.keys(props)) {
+        if (keep.includes(id)) continue;
+        for (const inst of props[id]) disposeInstance(inst);
+        delete props[id];
+      }
+    };
 
     // ── Head occluders ──────────────────────────────────────────────────
     // Invisible depth-only ellipsoids. Drawn first (renderOrder -1), they fill
@@ -415,17 +450,20 @@ export function useThreeRenderer(
       const f     = filterRef.current;
       const faces = facesRef.current;
 
+      // Lazily create only the active filter's pools, and free everything else
+      // so iOS keeps just the current prop in memory.
+      const propIds = FILTER_PROPS[f];
+      prunePools(propIds ?? []);
+
       // Hide every prop instance, then place one on each detected face.
       for (const id of Object.keys(props)) {
         for (const inst of props[id]) inst.visible = false;
       }
       for (const occ of occluders) occ.visible = false;
 
-      const propIds = FILTER_PROPS[f];
       if (propIds) {
         for (const id of propIds) {
-          const pool = props[id];
-          if (!pool) continue;
+          const pool = ensurePool(id);
           const update = updateProp[id];
           const count = Math.min(faces.length, pool.length);
           for (let i = 0; i < count; i++) {
@@ -436,7 +474,7 @@ export function useThreeRenderer(
       }
 
       // Hund 2: animate each visible dog tongue to the wearer's mouth openness.
-      if (f === 'dog2') {
+      if (f === 'dog2' && props.dog2) {
         const pool = props.dog2;
         const count = Math.min(faces.length, pool.length);
         for (let i = 0; i < count; i++) applyDogTongue(pool[i], faces[i], vW, vH);
@@ -444,7 +482,7 @@ export function useThreeRenderer(
 
       // Party glasses: cycle the whole model through the colour wheel over time,
       // the same way the neon filter does (hue = (t·50°) mod 360).
-      if (f === 'party_glasses') {
+      if (f === 'party_glasses' && props.party_glasses) {
         const hue = ((performance.now() / 1000) * 70 / 360) % 1;
         partyColor.setHSL(hue, 1, 0.55);
         for (const inst of props.party_glasses) {
@@ -490,6 +528,7 @@ export function useThreeRenderer(
 
     return () => {
       cancelAnimationFrame(rafId);
+      prunePools([]);            // free any live prop pools
       envTex?.dispose();
       occGeo.dispose();
       occMat.dispose();
