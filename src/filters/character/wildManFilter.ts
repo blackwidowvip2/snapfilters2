@@ -1,5 +1,19 @@
 import type { DrawCtx } from '../DrawCtx';
 import { getPersonMask } from '../../lib/personMask';
+import type { LandmarkList } from '../../types';
+
+// All faces detected this frame, set by the render loop before drawing. Used to
+// keep each person's wild-man artwork on their OWN side of the midline between
+// neighbouring heads, so two people standing close together don't overlap.
+let allFaces: LandmarkList[] = [];
+export function setWildManFaces(faces: LandmarkList[]) { allFaces = faces; }
+
+// Eye-line midpoint of a face in mirrored canvas pixels (matches DrawCtx.pt).
+function eyeMidOf(lm: LandmarkList, W: number, H: number) {
+  const px = (i: number) => ({ x: (1 - lm[i].x) * W, y: lm[i].y * H });
+  const l1 = px(33), l2 = px(133), r1 = px(263), r2 = px(362);
+  return { x: (l1.x + l2.x + r1.x + r2.x) / 4, y: (l1.y + l2.y + r1.y + r2.y) / 4 };
+}
 
 // ════════════════════════════════════════════════════════════════════════
 //  Wild Man — a colourful crazy-haired cartoon face stamped over the head,
@@ -99,6 +113,37 @@ export function drawWildMan(d: DrawCtx): void {
   octx.beginPath();
   octx.ellipse(headCtr.x, headCtr.y, headRx, headRy, d.angle, 0, Math.PI * 2);
   octx.clip();
+
+  // When several people are in frame, also clip to THIS person's side of the
+  // perpendicular bisector between their head and each neighbour, so the artwork
+  // never spills onto an adjacent face. We identify "this" face as the one whose
+  // eye-mid is closest to the real anchor, then half-plane-clip against the rest.
+  if (allFaces.length > 1) {
+    const mids = allFaces.map((lm) => eyeMidOf(lm, W, H));
+    let self = 0, best = Infinity;
+    mids.forEach((m, i) => {
+      const dd = (m.x - realMid.x) ** 2 + (m.y - realMid.y) ** 2;
+      if (dd < best) { best = dd; self = i; }
+    });
+    const BIG = W + H;
+    mids.forEach((m, i) => {
+      if (i === self) return;
+      let dx = m.x - realMid.x, dy = m.y - realMid.y;
+      const len = Math.hypot(dx, dy) || 1;
+      dx /= len; dy /= len;                       // unit vector toward neighbour
+      const px = (realMid.x + m.x) / 2, py = (realMid.y + m.y) / 2;  // bisector point
+      const ex = -dy, ey = dx;                    // along the bisector line
+      // Quad covering this face's half-plane (the −(dx,dy) side of the bisector).
+      octx.beginPath();
+      octx.moveTo(px + ex * BIG, py + ey * BIG);
+      octx.lineTo(px - ex * BIG, py - ey * BIG);
+      octx.lineTo(px - ex * BIG - dx * BIG, py - ey * BIG - dy * BIG);
+      octx.lineTo(px + ex * BIG - dx * BIG, py + ey * BIG - dy * BIG);
+      octx.closePath();
+      octx.clip();
+    });
+  }
+
   octx.translate(realMid.x, realMid.y);
   octx.rotate(d.angle + Math.PI);   // rotated 180°
   octx.scale(scale, scale);

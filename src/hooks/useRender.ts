@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { applyPixelFilter, applyOverlayFilter } from '../filters/renderer';
+import { setWildManFaces } from '../filters/character/wildManFilter';
 
 export function useRender(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -51,6 +52,7 @@ export function useRender(
       // Face-tracked overlays/warps — applied once per detected person. Each
       // warp only rewrites its own face region, so multiple faces compose.
       if (faces.length > 0) {
+        setWildManFaces(faces);   // let the wild-man filter split overlapping heads
         for (const lm of faces) applyOverlayFilter(ctx, f, lm, W, H, t);
       } else {
         applyOverlayFilter(ctx, f, null, W, H, t);

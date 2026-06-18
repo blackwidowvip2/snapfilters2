@@ -264,18 +264,45 @@ export function drawHologram(d: DrawCtx) {
 }
 
 // ── Neon Outline ───────────────────────────────────────────────────────────
+// Facial feature paths (eyes, mouth, brows, nose) — shared by the full
+// contour and the features-only variant used by Neon Krop.
+const NEON_FEATURES=[
+  [33,160,158,133,153,144,33],
+  [362,385,387,263,373,380,362],
+  [61,185,40,39,37,0,267,269,270,409,291,375,321,405,314,17,84,181,91,146,61],
+  [70,63,105,66,107],
+  [336,296,334,293,300],
+  [168,6,197,195,5,4,1],
+  [98,327,326,2,97],
+];
+
+// Eyes/nose/mouth only — no face oval. Used by Neon Krop, where the body
+// silhouette already supplies the head outline.
+export function drawNeonFeatures(d: DrawCtx) {
+  const { ctx, s, t } = d;
+  const hue=(t*38)%360;
+  const hue2=(hue+130)%360;
+  ([
+    { blur:18, lw:s*0.03,  alpha:0.45 },
+    { blur:6,  lw:s*0.012, alpha:0.92 },
+  ] as const).forEach(({ blur, lw, alpha }) => {
+    ctx.save();
+    ctx.lineWidth=lw; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.globalAlpha=alpha;
+    ctx.strokeStyle=`hsl(${hue2},100%,68%)`;
+    ctx.shadowColor=`hsl(${hue2},100%,68%)`; ctx.shadowBlur=blur;
+    NEON_FEATURES.forEach(path => {
+      ctx.beginPath();
+      path.forEach((idx,i) => { const p=d.pt(idx); i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y); });
+      ctx.stroke();
+    });
+    ctx.restore();
+  });
+}
+
 export function drawNeonOutline(d: DrawCtx) {
   const { ctx, s, t } = d;
   const silhouette=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
-  const features=[
-    [33,160,158,133,153,144,33],
-    [362,385,387,263,373,380,362],
-    [61,185,40,39,37,0,267,269,270,409,291,375,321,405,314,17,84,181,91,146,61],
-    [70,63,105,66,107],
-    [336,296,334,293,300],
-    [168,6,197,195,5,4,1],
-    [98,327,326,2,97],
-  ];
+  const features=NEON_FEATURES;
   const hue=(t*38)%360;
   const hue2=(hue+130)%360;
 

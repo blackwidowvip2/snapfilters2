@@ -10,11 +10,13 @@ import { drawBunny } from './animal/bunny';
 import { drawFox }   from './animal/fox';
 import { drawLion }  from './animal/lion';
 import { drawLipRed, drawLipPink, drawEyeshadowSmoky } from './makeup/index';
+import { drawLipRainbow } from './makeup/lipstickFilter';
+import { drawIrisColor } from './makeup/irisColor';
 import { drawClown } from './makeup/clownFilter';
 import { drawWildMan } from './character/wildManFilter';
 import { drawAgfFan } from './props/agfFan';
 import { drawDenmarkFan } from './props/denmarkFan';
-import { pxBigEyes, pxBigMouth, pxWideLips, pxAlienHead, pxVerticalScale, pxSlimFace, pxSwirlFace, pxSadMouth, drawThirdEye } from './character/index';
+import { pxBigEyes, pxBigMouth, pxWideLips, pxAlienHead, pxVerticalScale, pxSlimFace, pxSwirlFace, pxSadMouth, pxPuffyFace, drawThirdEye } from './character/index';
 import { pxAniso, pxJelly, pxSlowJelly, pxBlockify, pxTaper, pxExplode } from './distort2/warps';
 
 // Head-motion tracker for the "jelly bounce" filter: movement of the face centre
@@ -28,7 +30,7 @@ import type { LandmarkList } from '../types';
 // Filters that skip pixel processing (canvas overlay only)
 const NO_PIXEL = new Set([
   'none','dog','cat','bunny','fox','lion',
-  'lip_red','lip_pink','eyeshadow_smoky','eyeshadow_glam','full_glam',
+  'lip_red','lip_pink','lip_rainbow','eyeshadow_smoky','eyeshadow_glam','full_glam','iris_color',
   'vampire','devil','angel','alien','alien_face',
   'third_eye','clown',
   // Three.js disguise prop — handled separately
@@ -52,7 +54,7 @@ export function applyPixelFilter(
     switch (filterId) {
       case 'neon':         out = pxNeon(id.data, W, H, t);        break;
       case 'neon_dark':    out = pxBlack(W, H);                   break;
-      case 'neon_body':    out = pxNeon(id.data, W, H, t);        break;
+      case 'neon_body':    out = pxBlack(W, H);                   break;
       case 'glitch':       out = pxGlitch(id.data, W, H, t);      break;
       case 'thermal':      out = pxThermal(id.data, W, H);        break;
       case 'cyberpunk':    out = pxCyberpunk(id.data, W, H);      break;
@@ -98,7 +100,9 @@ export function applyOverlayFilter(
     // Makeup
     case 'lip_red':         d && drawLipRed(d);         break;
     case 'lip_pink':        d && drawLipPink(d);        break;
+    case 'lip_rainbow':     d && drawLipRainbow(d);     break;
     case 'eyeshadow_smoky': d && drawEyeshadowSmoky(d); break;
+    case 'iris_color':      d && drawIrisColor(d);      break;
     // Character
     case 'third_eye':     d && drawThirdEye(d);      break;
     case 'clown':         d && drawClown(d);         break;
@@ -332,6 +336,31 @@ export function applyOverlayFilter(
         try {
           const id2 = ctx.getImageData(0, 0, W, H);
           const warped = pxSwirlFace(id2.data, W, H, mc.x, cy, faceH * 0.55, 1.6);
+          ctx.putImageData(warped, 0, 0);
+        } catch (_) { /* taint guard */ }
+      }
+      break;
+    }
+    case 'puffy_face': {
+      // Chubby cheeks only: one radial bulge on each cheek, positioned between
+      // the mouth and the face side and sized so it fades out before reaching
+      // the eyes, nose or mouth (those features stay untouched).
+      if (d) {
+        const sideL = d.pt(234), sideR = d.pt(454);     // face sides
+        const apexL = d.pt(50), apexR = d.pt(280);       // cheek apples
+        const faceW = Math.hypot(sideR.x - sideL.x, sideR.y - sideL.y);
+        const faceCx = (sideL.x + sideR.x) / 2;
+        // One bump centred on each cheek apple, pushing the skin outward so the
+        // cheek widens. Radius covers the cheek but is kept small enough to fade
+        // out before the eyes (above), nose (inward) and mouth (below).
+        const rx = faceW * 0.26, ry = faceW * 0.26, push = faceW * 0.14;
+        const cheeks = [
+          { cx: apexL.x, cy: apexL.y, rx, ry, push, dirX: Math.sign(faceCx - apexL.x) },
+          { cx: apexR.x, cy: apexR.y, rx, ry, push, dirX: Math.sign(faceCx - apexR.x) },
+        ];
+        try {
+          const id2 = ctx.getImageData(0, 0, W, H);
+          const warped = pxPuffyFace(id2.data, W, H, cheeks);
           ctx.putImageData(warped, 0, 0);
         } catch (_) { /* taint guard */ }
       }

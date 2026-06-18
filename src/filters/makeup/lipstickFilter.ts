@@ -125,6 +125,18 @@ function tracePath(
 export function drawLipRed(d: DrawCtx)  { drawLipstick(d, RED_PIGMENT); }
 export function drawLipPink(d: DrawCtx) { drawLipstick(d, PINK_PIGMENT); }
 
+// Same pipeline as Rød læbe, but the pigment cycles smoothly through the full
+// hue spectrum over a fixed time frame (matching the Iris-farve filter).
+const LIP_CYCLE_SECONDS = 15;
+export function drawLipRainbow(d: DrawCtx) {
+  const hue = ((d.t / LIP_CYCLE_SECONDS) * 360) % 360;
+  drawLipstick(d, {
+    mult:     `hsl(${hue},85%,55%)`,
+    soft:     `hsl(${hue},70%,38%)`,
+    fallback: `hsl(${hue},80%,45%)`,
+  });
+}
+
 function drawLipstick(d: DrawCtx, pigment: Pigment) {
   const { ctx, s } = d;
   const W = d.W, H = d.H;

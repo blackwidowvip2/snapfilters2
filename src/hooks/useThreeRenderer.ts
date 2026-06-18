@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { useStore } from '../store/useStore';
 // createSunglasses() (procedural) is still available in ../filters/props/sunglasses
 // as a fallback if you ever want to render without the .glb asset.
-import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateHeadTop, updateEnclosingMask } from '../filters/props/sunglasses';
+import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateHeadTop, updateEnclosingMask, updateHorse3 } from '../filters/props/sunglasses';
 import { createClownNose, createClownHair, updateClownNose, updateClownHair } from '../filters/props/clown';
 import type { LandmarkList } from '../types';
 
@@ -137,6 +137,7 @@ const FILTER_PROPS: Record<string, string[]> = {
   anonymous_mask:['anonymous_mask'],
   ironman:       ['ironman'],
   horse2:        ['horse2'],
+  horse3:        ['horse3'],
   agf_cap:       ['agf_cap'],
   agf_cap_logo:  ['agf_cap_logo'],
   batman2:       ['batman2'],
@@ -233,14 +234,14 @@ export function useThreeRenderer(
     const urls: Record<string, string> = {
       sunglasses:    `${import.meta.env.BASE_URL}models/sunglasses.glb`,
       party_glasses: `${import.meta.env.BASE_URL}models/${encodeURIComponent('Party Glasses.glb')}`,
-      ski_goggles:   `${import.meta.env.BASE_URL}models/Ski_goggles.glb`,
+      ski_goggles:   `${import.meta.env.BASE_URL}models/Pink_Neon_Ski_Goggles.glb`,
       anon_mask:     `${import.meta.env.BASE_URL}models/Anon_Mask.glb`,
       anonymous_mask:`${import.meta.env.BASE_URL}models/Anonymous_mask.glb`,
       ironman:       `${import.meta.env.BASE_URL}models/Ironman_Helmet.glb`,
       agf_cap:       `${import.meta.env.BASE_URL}models/AGF_cap.glb`,
       agf_cap_logo:  `${import.meta.env.BASE_URL}models/AGF_cap_logo.glb`,
       batman2:       `${import.meta.env.BASE_URL}models/Batman_mask.glb`,
-      bunny_ears:    `${import.meta.env.BASE_URL}models/${encodeURIComponent('Bunny ears.glb')}`,
+      bunny_ears:    `${import.meta.env.BASE_URL}models/Bunny_ears_nose.glb`,
       horse:         `${import.meta.env.BASE_URL}models/Horse.glb`,
       dog2:          `${import.meta.env.BASE_URL}models/Dog_Face_painted.glb`,
       disguise:      `${import.meta.env.BASE_URL}models/Groucho_disguise.glb`,
@@ -249,8 +250,8 @@ export function useThreeRenderer(
     const makeProp: Record<string, () => THREE.Object3D> = {
       sunglasses:    () => createSunglassesFromGLB(urls.sunglasses, { fit: 1.0, pivotZFront: true }),
       party_glasses: () => createSunglassesFromGLB(urls.party_glasses, { fit: 1.0, pivotZFront: true }),
-      // Ski goggles — wide wrap-around shield; a touch larger than normal glasses.
-      ski_goggles:   () => createSunglassesFromGLB(urls.ski_goggles, { fit: 1.15, pivotZFront: true }),
+      // Ski goggles — Pink Neon model; scaled down considerably to sit on the face.
+      ski_goggles:   () => createSunglassesFromGLB(urls.ski_goggles, { fit: 1.13, pivotZFront: true, offset: { y: 0.17 } }),
       anon_mask:     () => createSunglassesFromGLB(urls.anon_mask, { fit: 1.0 }),
       // Nudged down so the mask's eye holes land on the person's eyes.
       anonymous_mask:() => createSunglassesFromGLB(urls.anonymous_mask, { fit: 1.0, hideNodes: ['Sphere'], offset: { y: -0.2 } }),
@@ -263,13 +264,35 @@ export function useThreeRenderer(
       // The model already faces the camera in its native orientation, so no
       // rotation. Coloured black; anchored on the eye line (see updateProp).
       batman2:       () => createSunglassesFromGLB(urls.batman2, { fit: 1.3, forceColor: 0x0a0a0a }),
-      bunny_ears:    () => createSunglassesFromGLB(urls.bunny_ears, { fit: 1.0 }),
+      // Tint the 4 whiskers (2 per side) black. They are the outer strands of the
+      // nose blob (the geometry stops at ny≈0.23, so the height band is 0.03–0.24).
+      // The inner X threshold is pulled further toward the centre in the UPPER part
+      // of the band (ny>0.16), where the top whiskers' inner ends curve in toward
+      // the still-narrow snout — without catching the wider lower muzzle. The rest
+      // of the model keeps its texture.
+      bunny_ears:    () => createSunglassesFromGLB(urls.bunny_ears, {
+        fit: 1.0,
+        tintColorFn: (nx, ny) => {
+          // Lower the two LEFT whiskers (nx<0.5) by 0.01 in height vs the right.
+          const y = nx < 0.5 ? ny + 0.01 : ny;
+          if (y <= 0.03 || y >= 0.24) return [1, 1, 1];
+          const inner = y > 0.16 ? 0.349 : 0.33;   // widen inward for the top whiskers
+          if (nx < 0.5) return nx < inner ? [0, 0, 0] : [1, 1, 1];
+          // Right whiskers: colour a touch more (a little further in toward the snout).
+          return nx > 1 - (inner + 0.005) ? [0, 0, 0] : [1, 1, 1];
+        },
+      }),
       // Hund 2 — painted 3D dog face worn as a mask over the user's face.
       dog2:          () => createSunglassesFromGLB(urls.dog2, { fit: 1.2 }),
       // Hest — closed 360° head that ENCLOSES the whole head: the horse head is
       // built clearly larger than the real head and pushed back (see
       // updateEnclosingMask) so the person's head sits INSIDE it like a helmet.
       horse2:        () => createSunglassesFromGLB(urls.horse, { fit: 1.8, vertexColorFn: horseColor, offset: { y: 1.25 } }),
+      // Hest 3D (experiment) — separate instance so it can be tuned without
+      // touching the working Hest (horse2). The model sits inside its tracked
+      // root with a small offset; updateHorse3 fastens the root to the head
+      // pose and auto-scales by head width + height. Tune fit/offset freely.
+      horse3:        () => createSunglassesFromGLB(urls.horse, { fit: 2.0, vertexColorFn: horseColor, offset: { y: 1.7 } }),
       // Groucho disguise — real 3D model (glasses + brows + nose + moustache),
       // worn on the eye line like the other glasses props. offset.y lowers the
       // model so its LENS CENTRES (which sit ~0.123 model-units above the bbox
@@ -289,6 +312,7 @@ export function useThreeRenderer(
       anonymous_mask:(p, lm, W, H) => { updateMask(p, lm, W, H); p.rotation.y = -p.rotation.y; },
       ironman:       updateMask,
       horse2:        updateEnclosingMask(0.6),   // pushed deep into the skull so the head sits INSIDE the horse head
+      horse3:        updateHorse3(0.5, 0.88),     // experiment: real 3D head-pose basis (rotation + translation in world space)
       agf_cap:       updateHeadTop(-0.20, 0.85, 1.0),   // lowered onto the head, 15% smaller
       agf_cap_logo:  updateHeadTop(-0.20, 0.85, 1.0),
       batman2:       updateEyeMask(0.37, 0.87),   // lifted to the eyes; 87% size so it fits the head
@@ -350,7 +374,7 @@ export function useThreeRenderer(
     const perspCam = new THREE.PerspectiveCamera(40, initW / initH, 1, 5000);
     perspCam.position.set(0, 0, PERSP_D);
     perspCam.lookAt(0, 0, 0);
-    const PERSP_FILTERS = new Set(['horse2']);
+    const PERSP_FILTERS = new Set(['horse2', 'horse3']);
 
     // ── Frame loop ──────────────────────────────────────────────────────
     let rafId: number;

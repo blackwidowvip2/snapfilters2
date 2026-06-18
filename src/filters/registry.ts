@@ -20,9 +20,12 @@ export const FILTERS: FilterDefinition[] = [
   { id:'fox',              label:'Ræv',          icon:'🦊', category:'animal',    description:'Spidse ører og hvide kinder' },
   { id:'lion',             label:'Løve',         icon:'🦁', category:'animal',    description:'Animeret manke og knurhår' },
   { id:'horse2',           label:'Hest',         icon:'🐎', category:'animal',    description:'3D hestehoved der omkranser hele hovedet' },
+  { id:'horse3',           label:'Hest 3D',      icon:'🐴', category:'animal',    description:'3D hestehoved fastgjort til hovedets pose — omslutter hele ansigtet' },
   // Makeup
   { id:'lip_red',          label:'Rød læbe',     icon:'💋', category:'makeup',   description:'Klassisk rød læbestift' },
   { id:'lip_pink',         label:'Pink læbe',    icon:'🌸', category:'makeup',   description:'Blød pink med glans' },
+  { id:'lip_rainbow',      label:'Regnbue læbe', icon:'🌈', category:'makeup',   description:'Læbestift der skifter farve gennem hele farvespektret over tid' },
+  { id:'iris_color',       label:'Iris-farve',   icon:'👁️', category:'makeup',   description:'Iris skifter farve gennem hele farvespektret over tid' },
   { id:'eyeshadow_smoky',  label:'Smoky Eye',    icon:'🖤', category:'makeup',   description:'Blended sort øjenskygge' },
   // Character
   { id:'anon_mask',        label:'Anon Maske',    icon:'🎭', category:'character', description:'3D anonymous-maske' },
@@ -89,6 +92,7 @@ export const FILTERS: FilterDefinition[] = [
   { id:'jelly_bounce',    label:'Gelé-hop',       icon:'🫨', category:'distortion2', description:'Ansigtet hopper som gelé ved hovedbevægelser' },
   { id:'big_eyes_mini_mouth', label:'Store Øjne + Mini-mund', icon:'😳', category:'distortion2', description:'Kæmpe øjne og en lillebitte mund' },
   { id:'inverse_face',    label:'Omvendt Ansigt', icon:'🙃', category:'distortion2', description:'Stor mund, små øjne og lille næse' },
+  { id:'puffy_face',      label:'Buttet Ansigt',  icon:'🐹', category:'distortion2', description:'Oppustet ansigt med runde, fyldige kinder' },
 ];
 
 export const ALL_FILTERS: FilterDefinition[] = [

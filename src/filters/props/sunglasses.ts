@@ -210,6 +210,14 @@ export interface GlbOptions {
    * white muzzle and black nose) when it has no materials or textures.
    */
   vertexColorFn?: (x: number, y: number, z: number) => [number, number, number];
+  /**
+   * Per-vertex TINT that KEEPS the model's own material/texture and multiplies a
+   * colour onto it (MeshStandardMaterial.map × vertexColors). Given a vertex's
+   * NORMALISED local (x,y,z) (0–1 per axis), return [r,g,b] (0–1) — white (1,1,1)
+   * leaves the texture untouched, black (0,0,0) paints it black. Use to recolour
+   * a sub-region (e.g. the bunny whiskers) without losing the rest of the texture.
+   */
+  tintColorFn?: (x: number, y: number, z: number) => [number, number, number];
 }
 
 /**
@@ -301,6 +309,27 @@ export function createSunglassesFromGLB(url: string, opts: GlbOptions = {}): THR
               mesh.material = new THREE.MeshStandardMaterial({
                 vertexColors: true, roughness: 0.85, metalness: 0.0, envMapIntensity: 0.3,
               });
+            } else if (opts.tintColorFn) {
+              // Keep the model's own material + texture; multiply a per-vertex
+              // colour onto it so only a sub-region (e.g. whiskers) is recoloured.
+              const geo = mesh.geometry;
+              geo.computeBoundingBox();
+              const bb = geo.boundingBox!;
+              const sx = 1 / ((bb.max.x - bb.min.x) || 1);
+              const sy = 1 / ((bb.max.y - bb.min.y) || 1);
+              const sz = 1 / ((bb.max.z - bb.min.z) || 1);
+              const pos = geo.attributes.position as THREE.BufferAttribute;
+              const colors = new Float32Array(pos.count * 3);
+              for (let i = 0; i < pos.count; i++) {
+                const nx = (pos.getX(i) - bb.min.x) * sx;
+                const ny = (pos.getY(i) - bb.min.y) * sy;
+                const nz = (pos.getZ(i) - bb.min.z) * sz;
+                const [r, g, b] = opts.tintColorFn(nx, ny, nz);
+                colors[i * 3] = r; colors[i * 3 + 1] = g; colors[i * 3 + 2] = b;
+              }
+              geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+              const m = mesh.material as THREE.MeshStandardMaterial;
+              if (m) m.vertexColors = true;
             } else if (opts.forceColor !== undefined && !keep) {
               // Paint the mesh a solid colour (a dark, slightly glossy material so
               // the form still catches the environment light instead of going flat).
@@ -567,7 +596,7 @@ export function updatePerspectiveMask(depth = 0, focal = 600) {
 //  enclosed from every angle. `backFrac` sets how far back (into the head) the
 //  pivot sits, as a fraction of face width.
 // ════════════════════════════════════════════════════════════════════════
-export function updateEnclosingMask(backFrac = 0.3) {
+export function updateEnclosingMask(backFrac = 0.3, scaleMul = 1) {
   return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
     const pt = (idx: number) => ({
       x:  (1 - lm[idx].x) * W - W / 2,
@@ -594,10 +623,76 @@ export function updateEnclosingMask(backFrac = 0.3) {
     const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
 
     // Pivot at the head's centre (eye line, set back into the skull) so the mask
-    // wraps around the head and turns with it from every angle.
+    // wraps around the head and turns with it from every angle. `scaleMul` lets a
+    // model be grown beyond face width to cover the WHOLE head silhouette
+    // (default 1 keeps existing callers unchanged).
     prop.position.set(eyeCx, eyeCy, eyeCz - faceWidth * backFrac);
     prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
-    prop.scale.setScalar(faceWidth / MODEL_REF_WIDTH);
+    prop.scale.setScalar((faceWidth / MODEL_REF_WIDTH) * scaleMul);
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Hest 3D (experiment) — fasten a closed head model OVER the whole face and
+//  around it (not just in front). Like updateEnclosingMask, the prop's ROOT is
+//  tracked to the head pose (position + rotation) and the model sits inside the
+//  root with its own offset, so:
+//        HorseRoot (tracked here)
+//          └── Horse.glb (offset tuned inside, via createSunglassesFromGLB)
+//  This version auto-scales from the head SIZE (a blend of cheek-to-cheek width
+//  AND brow-to-chin height) so the head grows with both, and exposes tunable
+//  `backFrac` (pivot depth into the skull) and `scaleMul` (overall fit) so the
+//  experiment can be adjusted WITHOUT touching the working "Hest" (horse2).
+// ════════════════════════════════════════════════════════════════════════
+// Reused scratch objects so the per-frame pose solve allocates nothing.
+const _L = new THREE.Vector3(), _R = new THREE.Vector3();
+const _T = new THREE.Vector3(), _B = new THREE.Vector3();
+const _right = new THREE.Vector3(), _up = new THREE.Vector3(), _fwd = new THREE.Vector3();
+const _basis = new THREE.Matrix4();
+
+export function updateHorse3(backFrac = 0.5, scaleMul = 1) {
+  return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
+    // Landmarks → camera/world space. x is mirrored (selfie view) and z is the
+    // metric-ish depth MediaPipe gives, scaled like x. This is a real 3D point
+    // cloud, so we can estimate a full head POSE from it (not a 2D heuristic).
+    const set = (v: THREE.Vector3, idx: number) =>
+      v.set((1 - lm[idx].x) * W - W / 2, -(lm[idx].y * H - H / 2), -(lm[idx].z ?? 0) * W);
+    set(_L, 234); set(_R, 454);   // ear-to-ear
+    set(_T, 10);  set(_B, 152);   // forehead → chin
+
+    // ── Head pose: an orthonormal basis built straight from the 3D landmarks ──
+    // right = ear→ear, up = chin→forehead, forward = right × up. This captures
+    // the true rotation (yaw, pitch AND roll together, including looking up/down
+    // and turning), unlike the damped 2D yaw/pitch heuristic the other props use.
+    _right.subVectors(_R, _L).normalize();
+    _up.subVectors(_T, _B).normalize();
+    _fwd.crossVectors(_right, _up).normalize();
+    // Force forward to point TOWARD the camera (+Z). In this selfie space (X
+    // mirrored, Z negated) right×up comes out facing AWAY from the camera for a
+    // front-on face, which previously pushed the model in FRONT of the head
+    // instead of into the skull. Flip forward (and right, to keep a proper
+    // right-handed rotation — no mirror) when it faces away.
+    if (_fwd.z < 0) { _fwd.negate(); _right.negate(); }
+    // Re-orthogonalise up so the basis is exactly orthonormal (landmarks aren't
+    // perfectly perpendicular). Keeps it a proper rotation (no shear/mirror).
+    _up.crossVectors(_fwd, _right).normalize();
+    _basis.makeBasis(_right, _up, _fwd);
+    prop.quaternion.setFromRotationMatrix(_basis);
+
+    // ── Size from the head's real dimensions (width + height) ──
+    const faceWidth = _R.distanceTo(_L);
+    const faceHeight = _T.distanceTo(_B) || faceWidth;
+    const headSize = faceWidth * 0.6 + faceHeight * 0.4;
+
+    // ── Translation in world space ──
+    // Anchor on the head centre and push the pivot back ALONG THE HEAD'S OWN
+    // forward axis (into the skull), so the closed model wraps around the head
+    // and the head sits inside it from every angle. Depth (z) is taken from the
+    // landmarks, so distance-to-camera is reflected through the perspective cam.
+    const cx = (_T.x + _B.x) / 2, cy = (_T.y + _B.y) / 2, cz = (_T.z + _B.z) / 2;
+    const back = faceWidth * backFrac;
+    prop.position.set(cx - _fwd.x * back, cy - _fwd.y * back, cz - _fwd.z * back);
+    prop.scale.setScalar((headSize / MODEL_REF_WIDTH) * scaleMul);
   };
 }
 
@@ -696,10 +791,51 @@ export function updateMustache(scaleMul = 1, bias = 0) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-//  Map MediaPipe landmarks → transform for ON-TOP-OF-HEAD props (bunny ears).
-//  Anchored above the forehead and lifted along the head-up axis so the ears
-//  stand on the crown and tilt with the head.
+//  Map MediaPipe landmarks → transform for the combined bunny ears+nose model.
+//  The model is anchored so its NOSE lands on the person's nose: the ears then
+//  rise above the head automatically (the nose and ears are one rigid model).
 // ════════════════════════════════════════════════════════════════════════
+
+// One-time per instance: the model's nose centre expressed in the prop ROOT's
+// local space (so it survives the per-frame scale/rotation we apply below).
+// The Bunny_ears_nose model is two separated masses — ears up top, the nose as
+// the lower blob — so the nose centre is the centroid of the bottom 25% of the
+// geometry (by height). Returns null until the GLB has streamed in.
+const bunnyNoseCache = new WeakMap<THREE.Object3D, THREE.Vector3>();
+const _bnTmp = new THREE.Vector3();
+
+function bunnyNoseLocal(prop: THREE.Object3D): THREE.Vector3 | null {
+  const cached = bunnyNoseCache.get(prop);
+  if (cached) return cached;
+
+  let mesh: THREE.Mesh | null = null;
+  prop.traverse((o) => { if (!mesh && (o as THREE.Mesh).isMesh) mesh = o as THREE.Mesh; });
+  if (!mesh) return null;                       // GLB still loading
+  const m = mesh as THREE.Mesh;
+  const geo = m.geometry;
+  if (!geo) return null;
+
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox!;
+  const thr = bb.min.y + (bb.max.y - bb.min.y) * 0.25;   // bottom 25% = nose blob
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  let cx = 0, cy = 0, cz = 0, c = 0;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y < thr) { cx += pos.getX(i); cy += y; cz += pos.getZ(i); c++; }
+  }
+  if (!c) return null;
+
+  // Geometry space → prop-root local space (apply the child/model transforms
+  // baked in by createSunglassesFromGLB, but cancel the root's own transform).
+  const nose = new THREE.Vector3(cx / c, cy / c, cz / c);
+  prop.updateWorldMatrix(true, true);
+  m.localToWorld(nose);
+  prop.worldToLocal(nose);
+  bunnyNoseCache.set(prop, nose);
+  return nose;
+}
+
 export function updateBunnyEars(
   prop: THREE.Object3D,
   lm: LandmarkList,
@@ -721,8 +857,7 @@ export function updateBunnyEars(
   const cheekL = pt(234), cheekR = pt(454);
   const faceWidth = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
 
-  // Head-up axis (chin → forehead), used to lift the ears onto the crown so
-  // they track head tilt.
+  // Head-up axis (chin → forehead), used to nudge the nose up the face.
   const brow = pt(10), chin = pt(152);
   const faceHeight = Math.hypot(brow.x - chin.x, brow.y - chin.y) || 1;
   const ux = (brow.x - chin.x) / faceHeight;
@@ -732,15 +867,34 @@ export function updateBunnyEars(
   if (ex < 0) { ex = -ex; ey = -ey; }
   const roll = Math.atan2(ey, ex);
 
+  // Nose tip = "centre of the nose" we anchor to.
   const noseTip = pt(1);
   const yaw = (noseTip.x - eyeCx) / (eyeDist * 0.9);
   const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
 
-  // Plant the ears just above the forehead, lifted along the head-up axis.
-  const lift = faceHeight * 0.45;
-  prop.position.set(brow.x + ux * lift, brow.y + uy * lift, brow.z);
+  // EAR_SCALE > 1 scales the whole model about the nose pivot: the nose stays put
+  // but the ears (far from the pivot) rise higher above the head.
+  // NOSE_LIFT lifts the nose (and the whole model) a little up the head axis.
+  const EAR_SCALE = 1.11;
+  const NOSE_LIFT = 0.02;   // fraction of face height
+  const sc = (faceWidth / MODEL_REF_WIDTH) * EAR_SCALE;
+  prop.scale.setScalar(sc);
   prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
-  prop.scale.setScalar(faceWidth / MODEL_REF_WIDTH);
+
+  const tx = noseTip.x + ux * faceHeight * NOSE_LIFT;
+  const ty = noseTip.y + uy * faceHeight * NOSE_LIFT;
+  const tz = noseTip.z;
+
+  // Place the model so its nose centre lands exactly on the (lifted) nose target.
+  // The root maps a local point p to world as R·(S·p)+T, so set T accordingly.
+  const noseLocal = bunnyNoseLocal(prop);
+  if (noseLocal) {
+    _bnTmp.copy(noseLocal).multiplyScalar(sc).applyEuler(prop.rotation);
+    prop.position.set(tx - _bnTmp.x, ty - _bnTmp.y, tz - _bnTmp.z);
+  } else {
+    // GLB not loaded yet — sit the origin on the nose as a rough placeholder.
+    prop.position.set(tx, ty, tz);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════

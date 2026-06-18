@@ -1,28 +1,22 @@
 import type { DrawCtx } from '../DrawCtx';
 import { getPersonMask } from '../../lib/personMask';
-import { drawNeonOutline } from './index';
+import { drawNeonFeatures } from './index';
 
 // ════════════════════════════════════════════════════════════════════════
-//  Neon Krop — like "Neon Mørk" (pure black backdrop), but the WHOLE person
-//  glows. The pixel pass (pxNeon) has already turned the frame into glowing
-//  neon edges; here we:
-//    1) crop those neon edges to the live person silhouette,
-//    2) lay a pure-black backdrop so the background disappears,
-//    3) add a soft, hue-shifting neon glow filling the body silhouette,
-//    4) trace a CRISP neon rim along the silhouette edge — the same bright
-//       two-pass glow used for the face contour, so the body's edges read as
-//       sharply as the head's,
-//    5) composite the neon-edge body on top, and
-//    6) add a crisp neon contour on the face for detail.
+//  Neon Krop — pure black backdrop with the person's OUTLINE (head, shoulders,
+//  arms, …) plus the facial features (eyes, nose, mouth) traced in sharp neon.
+//  No face oval, no fills.
 //
-//  The segmentation mask is in un-mirrored video space, so it is flipped
-//  (scale(-1,1)) to match the mirrored on-screen canvas.
+//  To get lines as crisp as the Neon Mørk face contour, the silhouette is not
+//  filled: it is converted into an actual vector PATH via marching squares
+//  (sub-pixel interpolated on the soft matte) and STROKED with the same
+//  two-pass glow + thin line as the face landmarks.
+//
+//  The mask is in un-mirrored video space, so it is flipped (scale(-1,1)) to
+//  match the mirrored on-screen canvas.
 // ════════════════════════════════════════════════════════════════════════
 
-let off: HTMLCanvasElement | null = null;
-let glow: HTMLCanvasElement | null = null;
 let sil: HTMLCanvasElement | null = null;
-let rim: HTMLCanvasElement | null = null;
 
 function sized(c: HTMLCanvasElement | null, W: number, H: number): HTMLCanvasElement {
   if (!c) c = document.createElement('canvas');
@@ -31,27 +25,11 @@ function sized(c: HTMLCanvasElement | null, W: number, H: number): HTMLCanvasEle
 }
 
 export function drawNeonBody(d: DrawCtx): void {
-  const { ctx, W, H, t } = d;
+  const { ctx, W, H, s, t } = d;
   const mask = getPersonMask();
 
-  // Match the face contour's hue so head and body share one neon colour.
-  const hue = (t * 38) % 360;
-
   if (mask) {
-    // 1) Capture the neon-edge frame and crop it to the person silhouette.
-    off = sized(off, W, H);
-    const octx = off.getContext('2d');
-    if (!octx) return;
-    octx.clearRect(0, 0, W, H);
-    octx.drawImage(ctx.canvas, 0, 0);
-    octx.save();
-    octx.globalCompositeOperation = 'destination-in';
-    octx.scale(-1, 1);
-    octx.drawImage(mask, -W, 0, W, H);
-    octx.restore();
-
-    // Screen-space silhouette (flip the un-mirrored mask once, then work in
-    // normal coords).
+    // Screen-space silhouette alpha matte (flip the un-mirrored mask).
     sil = sized(sil, W, H);
     const sctx = sil.getContext('2d');
     if (!sctx) return;
@@ -60,68 +38,64 @@ export function drawNeonBody(d: DrawCtx): void {
     sctx.scale(-1, 1);
     sctx.drawImage(mask, -W, 0, W, H);
     sctx.restore();
+    const px = sctx.getImageData(0, 0, W, H).data;
 
-    // 3a) Colour-tinted silhouette for the soft body glow.
-    glow = sized(glow, W, H);
-    const gctx = glow.getContext('2d');
-    if (!gctx) return;
-    gctx.clearRect(0, 0, W, H);
-    gctx.drawImage(sil, 0, 0);
-    gctx.globalCompositeOperation = 'source-in';
-    gctx.fillStyle = `hsl(${hue},100%,55%)`;
-    gctx.fillRect(0, 0, W, H);
+    const T = 128;                                   // iso level
+    const step = Math.max(3, Math.round(Math.min(W, H) / 160));
+    const a = (x: number, y: number) =>
+      px[((Math.min(H - 1, y) * W) + Math.min(W - 1, x)) * 4 + 3];
 
-    // 4a) Crisp rim band along the silhouette edge: silhouette minus an eroded
-    //     (centre-shrunk) copy leaves a thin outer band, which we tint bright.
-    const k = Math.max(2, Math.round(Math.min(W, H) * 0.012));
-    rim = sized(rim, W, H);
-    const rctx = rim.getContext('2d');
-    if (!rctx) return;
-    rctx.clearRect(0, 0, W, H);
-    rctx.globalCompositeOperation = 'source-over';
-    rctx.drawImage(sil, 0, 0);
-    rctx.globalCompositeOperation = 'destination-out';
-    rctx.drawImage(sil, k, k, W - 2 * k, H - 2 * k);   // erode, then subtract → rim
-    rctx.globalCompositeOperation = 'source-in';
-    rctx.fillStyle = `hsl(${hue},100%,68%)`;
-    rctx.fillRect(0, 0, W, H);
+    // Marching squares → list of line segments tracing the iso-contour.
+    const seg: number[] = [];   // x1,y1,x2,y2, …
+    const lerp = (p: number, q: number, va: number, vb: number) =>
+      vb === va ? p : p + (q - p) * ((T - va) / (vb - va));
 
-    // 2) Pure-black backdrop (matching "Neon Mørk").
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
+    for (let y = 0; y < H - 1; y += step) {
+      for (let x = 0; x < W - 1; x += step) {
+        const x1 = Math.min(x + step, W - 1), y1 = Math.min(y + step, H - 1);
+        const tl = a(x, y), tr = a(x1, y), br = a(x1, y1), bl = a(x, y1);
+        const code = (tl > T ? 1 : 0) | (tr > T ? 2 : 0) | (br > T ? 4 : 0) | (bl > T ? 8 : 0);
+        if (code === 0 || code === 15) continue;
+        const top:    [number, number] = [lerp(x, x1, tl, tr), y];
+        const right:  [number, number] = [x1, lerp(y, y1, tr, br)];
+        const bottom: [number, number] = [lerp(x, x1, bl, br), y1];
+        const left:   [number, number] = [x, lerp(y, y1, tl, bl)];
+        const push = (p: [number, number], q: [number, number]) =>
+          seg.push(p[0], p[1], q[0], q[1]);
+        switch (code) {
+          case 1: case 14: push(left, top); break;
+          case 2: case 13: push(top, right); break;
+          case 3: case 12: push(left, right); break;
+          case 4: case 11: push(right, bottom); break;
+          case 6: case 9:  push(top, bottom); break;
+          case 7: case 8:  push(left, bottom); break;
+          case 5:  push(left, top); push(right, bottom); break;
+          case 10: push(top, right); push(left, bottom); break;
+        }
+      }
+    }
 
-    // 3b) Soft, glowing neon fill of the body.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.45;
-    ctx.shadowColor = `hsl(${hue},100%,60%)`;
-    ctx.shadowBlur = 28;
-    ctx.drawImage(glow, 0, 0);
-    ctx.restore();
-
-    // 4b) Bright two-pass rim — soft outer glow, then sharp inner line — so the
-    //     body's edge matches the crispness of the face contour.
+    // Stroke the contour with the same crisp two-pass glow as the face.
+    const hue = (t * 38) % 360;
     ([
-      { blur: 18, alpha: 0.5 },
-      { blur: 5,  alpha: 0.95 },
-    ] as const).forEach(({ blur, alpha }) => {
+      { blur: 18, lw: s * 0.03,  alpha: 0.45 },
+      { blur: 6,  lw: s * 0.012, alpha: 0.92 },
+    ] as const).forEach(({ blur, lw, alpha }) => {
       ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.globalAlpha = alpha;
-      ctx.shadowColor = `hsl(${hue},100%,68%)`;
-      ctx.shadowBlur = blur;
-      ctx.drawImage(rim, 0, 0);
+      ctx.strokeStyle = `hsl(${hue},100%,65%)`;
+      ctx.shadowColor = `hsl(${hue},100%,65%)`; ctx.shadowBlur = blur;
+      ctx.beginPath();
+      for (let i = 0; i < seg.length; i += 4) {
+        ctx.moveTo(seg[i], seg[i + 1]);
+        ctx.lineTo(seg[i + 2], seg[i + 3]);
+      }
+      ctx.stroke();
       ctx.restore();
     });
-
-    // 5) Composite the neon-edge body on top.
-    ctx.drawImage(off, 0, 0);
-  } else {
-    // No segmentation yet — fall back to a black backdrop so the look matches.
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
   }
 
-  // 6) Crisp neon contour on the face for detail.
-  drawNeonOutline(d);
+  // Facial features (eyes, nose, mouth) — no face oval.
+  drawNeonFeatures(d);
 }
