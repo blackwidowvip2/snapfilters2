@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { useStore } from '../store/useStore';
 // createSunglasses() (procedural) is still available in ../filters/props/sunglasses
 // as a fallback if you ever want to render without the .glb asset.
-import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateHeadTop, updateEnclosingMask, updateHorse3 } from '../filters/props/sunglasses';
+import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateEyeAnchoredMask, updateHeadTop, updateEnclosingMask, updateHorse3 } from '../filters/props/sunglasses';
 import { createClownNose, createClownHair, updateClownNose, updateClownHair } from '../filters/props/clown';
 import type { LandmarkList } from '../types';
 
@@ -145,6 +145,9 @@ const FILTER_PROPS: Record<string, string[]> = {
   clown:         ['clown_hair', 'clown_nose'],
   bunny:         ['bunny_ears'],
   dog2:          ['dog2'],
+  lion3d:        ['lion3d'],
+  anubis:        ['anubis'],
+  triceratops:   ['triceratops'],
 };
 
 export function useThreeRenderer(
@@ -244,6 +247,9 @@ export function useThreeRenderer(
       bunny_ears:    `${import.meta.env.BASE_URL}models/Bunny_ears_nose.glb`,
       horse:         `${import.meta.env.BASE_URL}models/Horse.glb`,
       dog2:          `${import.meta.env.BASE_URL}models/Dog_Face_painted.glb`,
+      lion3d:        `${import.meta.env.BASE_URL}models/VipLionMask.glb`,
+      anubis:        `${import.meta.env.BASE_URL}models/AnubisHead.glb`,
+      triceratops:   `${import.meta.env.BASE_URL}models/Triceratops.glb`,
       disguise:      `${import.meta.env.BASE_URL}models/Groucho_disguise.glb`,
     };
     // Factory + face-tracking updater for every prop instance type.
@@ -284,6 +290,24 @@ export function useThreeRenderer(
       }),
       // Hund 2 — painted 3D dog face worn as a mask over the user's face.
       dog2:          () => createSunglassesFromGLB(urls.dog2, { fit: 1.2 }),
+      // Løve 3D — lion head converted from VipLionMask.stl, worn as a mask. The
+      // mane makes it wider than the face, so it is scaled up. Colour is the STL's
+      // uniform gold for now (region colouring to match the photo comes next).
+      lion3d:        () => createSunglassesFromGLB(urls.lion3d, { fit: 1.6 }),
+      // Anubis — jackal head from anubis-head.stl, worn as a mask.
+      // Orientation fix: rotate 90° clockwise in view plane (z = −90°) and tip the
+      // ears from pointing forward to pointing up (x = +90°). Signs may need a flip
+      // once seen on camera.
+      anubis:        () => createSunglassesFromGLB(urls.anubis, {
+        fit: 1.35,
+        rotation: { x: -Math.PI / 2, z: -Math.PI / 2 },
+      }),
+      // Triceratops — dino head converted from Triceratops.stl, worn as a mask.
+      // STL orientation unknown until seen on camera; rotation/fit may need tuning.
+      // Nose pointed up (+Y) and the crown pointed away from the camera (−Z) in
+      // the STL's native pose. Rotating +90° about X tips the nose forward toward
+      // the camera (+Z) and stands the crown up (+Y) so it wears as a face mask.
+      triceratops:   () => createSunglassesFromGLB(urls.triceratops, { fit: 1.6, rotation: { x: Math.PI / 2, y: Math.PI } }),
       // Hest — closed 360° head that ENCLOSES the whole head: the horse head is
       // built clearly larger than the real head and pushed back (see
       // updateEnclosingMask) so the person's head sits INSIDE it like a helmet.
@@ -319,6 +343,21 @@ export function useThreeRenderer(
 
       bunny_ears:    updateBunnyEars,
       dog2:          updateMask,
+      // Scale by the lion's own eye separation so BOTH sculpted eyes land on the
+      // person's eyes at any head size, anchored on the eye-midpoint. The eye
+      // position is given as normalised model coords (eyeNx,eyeNy,eyeNz) — tune
+      // these to match the model's eyes.
+      lion3d:        updateEyeAnchoredMask(0.36, 0.463, 0.82, 1.0),
+      // Eye-anchored so the two sculpted eye sockets land on the person's eyes at
+      // any head size. Coords are in the build-rotated frame (nx=left-right,
+      // ny=up, nz=front), estimated from a front-surface analysis — tune to taste.
+      anubis:        updateEyeAnchoredMask(0.34, 0.33, 0.65, 0.9),
+      // Eye-anchored like Løve 3D: scale by the model's own eye separation and
+      // anchor on the eye-midpoint so the person's eyes land in the dino's eye
+      // sockets (this also lifts the mask up onto the eye line). The normalised
+      // eye coords (nx=left↔right, ny=down↔up, nz=back↔front) are estimates —
+      // tune to match where the Triceratops' eyes actually sit on the model.
+      triceratops:   updateEyeAnchoredMask(0.30, 0.35, 0.72, 1.2),
       // Same handling as the party glasses: lenses anchored on the eyes/nose
       // bridge (so the two lens holes centre on the eyes) and the temple arms
       // stretched backward toward the ears.

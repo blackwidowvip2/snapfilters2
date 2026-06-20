@@ -743,6 +743,107 @@ export function updateEyeMask(eyeBias = 0, scaleMul = 1) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+//  Mask whose TWO sculpted eyes must land on the person's two eyes at ANY head
+//  size. Unlike updateEyeMask (which scales by face WIDTH and only anchors the
+//  midpoint), this scales the model so the distance between the model's eyes
+//  equals the person's eye distance, then anchors the eye-midpoint on the eyes —
+//  so both eyes track both eyes regardless of how big/small the head is.
+//
+//  The model's eyes are given as NORMALISED model coords (0–1 per axis from the
+//  geometry bounding box): symmetric in X about the centre, `eyeNx` is the LEFT
+//  eye (right = 1−eyeNx). Cached per prop instance (one geometry scan).
+// ════════════════════════════════════════════════════════════════════════
+type EyePair = { L: THREE.Vector3; R: THREE.Vector3; mid: THREE.Vector3; sep: number };
+const eyePairCache = new WeakMap<THREE.Object3D, EyePair>();
+const _emTmp = new THREE.Vector3();
+
+function lionEyesLocal(
+  prop: THREE.Object3D, eyeNx: number, eyeNy: number, eyeNz: number,
+): EyePair | null {
+  const cached = eyePairCache.get(prop);
+  if (cached) return cached;
+
+  let mesh: THREE.Mesh | null = null;
+  prop.traverse((o) => { if (!mesh && (o as THREE.Mesh).isMesh) mesh = o as THREE.Mesh; });
+  if (!mesh) return null;
+  const m = mesh as THREE.Mesh;
+  const geo = m.geometry;
+  if (!geo) return null;
+  geo.computeBoundingBox();
+  const gb = geo.boundingBox!;
+
+  // Map a geometry point → prop-ROOT space (applies the model's build rotation/
+  // scale/centre, cancels the root's own per-frame transform).
+  prop.updateWorldMatrix(true, true);
+  const toRoot = (gx: number, gy: number, gz: number) => {
+    const v = new THREE.Vector3(gx, gy, gz);
+    m.localToWorld(v); prop.worldToLocal(v); return v;
+  };
+
+  // Build the bbox in ROOT space from the geometry's 8 corners, so the eye
+  // coords are given in the UPRIGHT, build-rotated frame the viewer sees
+  // (nx = left↔right, ny = down↔up, nz = back↔front). Exact for 90° rotations.
+  const rb = new THREE.Box3().makeEmpty();
+  for (const cx of [gb.min.x, gb.max.x])
+    for (const cy of [gb.min.y, gb.max.y])
+      for (const cz of [gb.min.z, gb.max.z])
+        rb.expandByPoint(toRoot(cx, cy, cz));
+  const sz = new THREE.Vector3().subVectors(rb.max, rb.min);
+  const toLocal = (nx: number, ny: number, nz: number) =>
+    new THREE.Vector3(rb.min.x + nx * sz.x, rb.min.y + ny * sz.y, rb.min.z + nz * sz.z);
+
+  const L = toLocal(eyeNx, eyeNy, eyeNz);
+  const R = toLocal(1 - eyeNx, eyeNy, eyeNz);
+  const mid = new THREE.Vector3().addVectors(L, R).multiplyScalar(0.5);
+  const pair: EyePair = { L, R, mid, sep: L.distanceTo(R) || 1 };
+  eyePairCache.set(prop, pair);
+  return pair;
+}
+
+export function updateEyeAnchoredMask(eyeNx = 0.42, eyeNy = 0.58, eyeNz = 0.85, scaleMul = 1) {
+  return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
+    const pt = (idx: number) => ({
+      x:  (1 - lm[idx].x) * W - W / 2,
+      y: -(lm[idx].y * H - H / 2),
+      z: -(lm[idx].z ?? 0) * W,
+    });
+
+    const lOuter = pt(33), lInner = pt(133);
+    const rOuter = pt(263), rInner = pt(362);
+    const lEye = { x: (lOuter.x + lInner.x) / 2, y: (lOuter.y + lInner.y) / 2, z: (lOuter.z + lInner.z) / 2 };
+    const rEye = { x: (rOuter.x + rInner.x) / 2, y: (rOuter.y + rInner.y) / 2, z: (rOuter.z + rInner.z) / 2 };
+    const eyeDist = Math.hypot(rEye.x - lEye.x, rEye.y - lEye.y) || 1;
+    const eyeMid = { x: (lEye.x + rEye.x) / 2, y: (lEye.y + rEye.y) / 2, z: (lEye.z + rEye.z) / 2 };
+
+    let ex = lEye.x - rEye.x, ey = lEye.y - rEye.y;
+    if (ex < 0) { ex = -ex; ey = -ey; }
+    const roll = Math.atan2(ey, ex);
+    const eyeCx = eyeMid.x, eyeCy = eyeMid.y;
+    const noseTip = pt(1);
+    const yaw = (noseTip.x - eyeCx) / (eyeDist * 0.9);
+    const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
+    prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
+
+    const eyes = lionEyesLocal(prop, eyeNx, eyeNy, eyeNz);
+    if (!eyes) { prop.position.set(eyeMid.x, eyeMid.y, eyeMid.z); return; }
+
+    // Scale so the model's eye separation matches the person's eye distance →
+    // both eyes hit both eyes at any head size.
+    const sc = (eyeDist / eyes.sep) * scaleMul;
+    prop.scale.setScalar(sc);
+
+    // Place so the model's eye-midpoint lands on the person's eye-midpoint.
+    // World(p) = R·(S·p)+T, so T = eyeMid − R·(S·mid).
+    _emTmp.copy(eyes.mid).multiplyScalar(sc).applyEuler(prop.rotation);
+    prop.position.set(
+      eyeMid.x - _emTmp.x,
+      eyeMid.y - _emTmp.y,
+      eyeMid.z - _emTmp.z + eyeDist * 0.1,
+    );
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════
 //  Mustache — anchored on the philtrum (between the nose base and the upper
 //  lip) so it sits under the nose and tracks head roll/yaw/pitch. `scaleMul`
 //  sizes it relative to the face; `bias` nudges it up (+) / down (−) along the

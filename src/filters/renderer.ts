@@ -39,7 +39,7 @@ const NO_PIXEL = new Set([
   'neon_outline',
   'gold',
   // Three.js props — handled separately
-  'sunglasses','party_glasses','anon_mask',
+  'sunglasses','party_glasses','anon_mask','lion3d','anubis','triceratops',
 ]);
 
 export function applyPixelFilter(

@@ -19,6 +19,7 @@ export const FILTERS: FilterDefinition[] = [
   { id:'bunny',            label:'Kanin',        icon:'🐰', category:'animal',    description:'Lange ører og lyserød næse' },
   { id:'fox',              label:'Ræv',          icon:'🦊', category:'animal',    description:'Spidse ører og hvide kinder' },
   { id:'lion',             label:'Løve',         icon:'🦁', category:'animal',    description:'Animeret manke og knurhår' },
+  { id:'lion3d',           label:'Løve 3D',      icon:'🦁', category:'animal',    description:'3D løvehoved-maske (fra foto) der bæres over ansigtet' },
   { id:'horse2',           label:'Hest',         icon:'🐎', category:'animal',    description:'3D hestehoved der omkranser hele hovedet' },
   { id:'horse3',           label:'Hest 3D',      icon:'🐴', category:'animal',    description:'3D hestehoved fastgjort til hovedets pose — omslutter hele ansigtet' },
   // Makeup
@@ -36,6 +37,8 @@ export const FILTERS: FilterDefinition[] = [
   { id:'clown',           label:'Klovn',        icon:'🤡', category:'character', description:'Hvidt ansigt, røde kinder, stor rød mund, 3D-næse og krøllet regnbuehår' },
   { id:'disguise',        label:'Forklædning',  icon:'🥸', category:'character', description:'Groucho-forklædning: briller, store øjenbryn, stor næse og overskæg' },
   { id:'wild_man',        label:'Vild Mand',    icon:'🤪', category:'character', description:'Farverig galning med vildt hår — dine egne øjne skinner igennem' },
+  { id:'anubis',          label:'Anubis',        icon:'🐺', category:'character', description:'3D Anubis-hoved (egyptisk sjakalgud) båret som maske' },
+  { id:'triceratops',     label:'Triceratops',   icon:'🦕', category:'character', description:'3D Triceratops-hoved båret som maske' },
   // Style
   { id:'neon',             label:'Neon',         icon:'⚡', category:'style',    description:'Farverige kantlinjer på mørk baggrund' },
   { id:'neon_outline',    label:'Neon Kontur',  icon:'🌈', category:'style',    description:'Glødende neon-kontur langs ansigtslandmarks' },

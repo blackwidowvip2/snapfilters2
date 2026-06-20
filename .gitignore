@@ -25,3 +25,6 @@ dist-ssr
 
 # Temporary model backup (not shipped)
 Horse_orig_backup.glb
+
+# Raw CAD/STL model sources (huge; converted GLBs live in public/models)
+models-src/
