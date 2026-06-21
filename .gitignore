@@ -28,3 +28,6 @@ Horse_orig_backup.glb
 
 # Raw CAD/STL model sources (huge; converted GLBs live in public/models)
 models-src/
+
+# Temporary GLB backups before compression (tools/optimize_glb.mjs)
+.model-backup/

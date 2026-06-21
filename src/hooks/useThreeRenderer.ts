@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { useStore } from '../store/useStore';
 // createSunglasses() (procedural) is still available in ../filters/props/sunglasses
 // as a fallback if you ever want to render without the .glb asset.
-import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateEyeAnchoredMask, updateHeadTop, updateEnclosingMask, updateHorse3 } from '../filters/props/sunglasses';
+import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateEyeAnchoredMask, updateHeadTop, updateHorse3 } from '../filters/props/sunglasses';
 import { createClownNose, createClownHair, updateClownNose, updateClownHair } from '../filters/props/clown';
 import type { LandmarkList } from '../types';
 
@@ -136,7 +136,6 @@ const FILTER_PROPS: Record<string, string[]> = {
   anon_mask:     ['anon_mask'],
   anonymous_mask:['anonymous_mask'],
   ironman:       ['ironman'],
-  horse2:        ['horse2'],
   horse3:        ['horse3'],
   agf_cap:       ['agf_cap'],
   agf_cap_logo:  ['agf_cap_logo'],
@@ -308,14 +307,8 @@ export function useThreeRenderer(
       // the STL's native pose. Rotating +90° about X tips the nose forward toward
       // the camera (+Z) and stands the crown up (+Y) so it wears as a face mask.
       triceratops:   () => createSunglassesFromGLB(urls.triceratops, { fit: 1.6, rotation: { x: Math.PI / 2, y: Math.PI } }),
-      // Hest — closed 360° head that ENCLOSES the whole head: the horse head is
-      // built clearly larger than the real head and pushed back (see
-      // updateEnclosingMask) so the person's head sits INSIDE it like a helmet.
-      horse2:        () => createSunglassesFromGLB(urls.horse, { fit: 1.8, vertexColorFn: horseColor, offset: { y: 1.25 } }),
-      // Hest 3D (experiment) — separate instance so it can be tuned without
-      // touching the working Hest (horse2). The model sits inside its tracked
-      // root with a small offset; updateHorse3 fastens the root to the head
-      // pose and auto-scales by head width + height. Tune fit/offset freely.
+      // Hest 3D — closed 360° head fastened to the head pose; updateHorse3 anchors
+      // the root and auto-scales by head width + height. Tune fit/offset freely.
       horse3:        () => createSunglassesFromGLB(urls.horse, { fit: 2.0, vertexColorFn: horseColor, offset: { y: 1.7 } }),
       // Groucho disguise — real 3D model (glasses + brows + nose + moustache),
       // worn on the eye line like the other glasses props. offset.y lowers the
@@ -335,11 +328,10 @@ export function useThreeRenderer(
       // This model turns opposite to the head with the standard yaw — invert it.
       anonymous_mask:(p, lm, W, H) => { updateMask(p, lm, W, H); p.rotation.y = -p.rotation.y; },
       ironman:       updateMask,
-      horse2:        updateEnclosingMask(0.6),   // pushed deep into the skull so the head sits INSIDE the horse head
-      horse3:        updateHorse3(0.5, 0.88),     // experiment: real 3D head-pose basis (rotation + translation in world space)
+      horse3:        updateHorse3(0.5, 0.88),     // real 3D head-pose basis (rotation + translation in world space)
       agf_cap:       updateHeadTop(-0.20, 0.85, 1.0),   // lowered onto the head, 15% smaller
       agf_cap_logo:  updateHeadTop(-0.20, 0.85, 1.0),
-      batman2:       updateEyeMask(0.37, 0.87),   // lifted to the eyes; 87% size so it fits the head
+      batman2:       updateEyeMask(0.33, 0.87),   // lifted to the eyes; 87% size so it fits the head
 
       bunny_ears:    updateBunnyEars,
       dog2:          updateMask,
@@ -347,17 +339,17 @@ export function useThreeRenderer(
       // person's eyes at any head size, anchored on the eye-midpoint. The eye
       // position is given as normalised model coords (eyeNx,eyeNy,eyeNz) — tune
       // these to match the model's eyes.
-      lion3d:        updateEyeAnchoredMask(0.36, 0.463, 0.82, 1.0),
+      lion3d:        updateEyeAnchoredMask(0.36, 0.463, 0.82, 1.0, 'lion3d'),
       // Eye-anchored so the two sculpted eye sockets land on the person's eyes at
       // any head size. Coords are in the build-rotated frame (nx=left-right,
       // ny=up, nz=front), estimated from a front-surface analysis — tune to taste.
-      anubis:        updateEyeAnchoredMask(0.34, 0.33, 0.65, 0.9),
+      anubis:        updateEyeAnchoredMask(0.34, 0.33, 0.65, 0.9, 'anubis'),
       // Eye-anchored like Løve 3D: scale by the model's own eye separation and
       // anchor on the eye-midpoint so the person's eyes land in the dino's eye
       // sockets (this also lifts the mask up onto the eye line). The normalised
       // eye coords (nx=left↔right, ny=down↔up, nz=back↔front) are estimates —
       // tune to match where the Triceratops' eyes actually sit on the model.
-      triceratops:   updateEyeAnchoredMask(0.30, 0.35, 0.72, 1.2),
+      triceratops:   updateEyeAnchoredMask(0.30, 0.35, 0.72, 1.2, 'triceratops'),
       // Same handling as the party glasses: lenses anchored on the eyes/nose
       // bridge (so the two lens holes centre on the eyes) and the temple arms
       // stretched backward toward the ears.
@@ -365,6 +357,24 @@ export function useThreeRenderer(
       clown_nose:    updateClownNose,
       clown_hair:    updateClownHair,
     };
+
+    // ── Dev-only live mask tuning ────────────────────────────────────────
+    // Register each eye-anchored mask's SHIPPING defaults (eye anchor + scale +
+    // build rotation in degrees) so the lil-gui panel opens on the live values.
+    // The panel + lil-gui are dynamically imported behind import.meta.env.DEV so
+    // they are tree-shaken out of production. showTuning(f) is called each frame
+    // (cheap no-op unless the active filter changed).
+    let showTuning: ((f: string) => void) | null = null;
+    if (import.meta.env.DEV) {
+      Promise.all([import('../lib/devTuning'), import('../lib/devTuningGui')])
+        .then(([t, g]) => {
+          t.registerMaskTuning('lion3d',      { eyeNx: 0.36, eyeNy: 0.463, eyeNz: 0.82, scaleMul: 1.0, rotX: 0,  rotY: 0,   rotZ: 0   });
+          t.registerMaskTuning('anubis',      { eyeNx: 0.34, eyeNy: 0.33,  eyeNz: 0.65, scaleMul: 0.9, rotX: -90, rotY: 0,   rotZ: -90 });
+          t.registerMaskTuning('triceratops', { eyeNx: 0.30, eyeNy: 0.35,  eyeNz: 0.72, scaleMul: 1.2, rotX: 90,  rotY: 180, rotZ: 0   });
+          showTuning = g.showTuning;
+        })
+        .catch((e) => console.warn('[tuning] dev panel failed to load', e));
+    }
 
     // Prop pools are created LAZILY — only when a filter that needs them is
     // selected — and disposed when no longer in use. Pre-creating 4 instances of
@@ -439,7 +449,7 @@ export function useThreeRenderer(
     );
     camera.position.z = 500;
 
-    // Perspective camera used ONLY for the enclosing horse (Hest 2), so that
+    // Perspective camera used ONLY for the enclosing horse (Hest 3D), so that
     // model has true 3D volume that wraps around the head — and turning the head
     // shows the side/back correctly. Calibrated so that at z=0 it matches the
     // orthographic mapping (object world-pixels = screen pixels); the closer the
@@ -448,7 +458,7 @@ export function useThreeRenderer(
     const perspCam = new THREE.PerspectiveCamera(40, initW / initH, 1, 5000);
     perspCam.position.set(0, 0, PERSP_D);
     perspCam.lookAt(0, 0, 0);
-    const PERSP_FILTERS = new Set(['horse2', 'horse3']);
+    const PERSP_FILTERS = new Set(['horse3']);
 
     // ── Frame loop ──────────────────────────────────────────────────────
     let rafId: number;
@@ -488,6 +498,8 @@ export function useThreeRenderer(
 
       const f     = filterRef.current;
       const faces = facesRef.current;
+
+      showTuning?.(f);   // dev-only: surface the tuning panel for the active mask
 
       // Lazily create only the active filter's pools, and free everything else
       // so iOS keeps just the current prop in memory.

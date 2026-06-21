@@ -15,19 +15,14 @@ export const FILTERS: FilterDefinition[] = [
   // Animal
   { id:'dog',              label:'Hund',        icon:'🐶', category:'animal',    description:'Hunde-ører, næse og tunge' },
   { id:'dog2',             label:'Hund 2',       icon:'🐕', category:'animal',    description:'3D malet hundeansigt' },
-  { id:'cat',              label:'Kat',          icon:'🐱', category:'animal',    description:'Katteøjne med slidsepupiller' },
   { id:'bunny',            label:'Kanin',        icon:'🐰', category:'animal',    description:'Lange ører og lyserød næse' },
-  { id:'fox',              label:'Ræv',          icon:'🦊', category:'animal',    description:'Spidse ører og hvide kinder' },
-  { id:'lion',             label:'Løve',         icon:'🦁', category:'animal',    description:'Animeret manke og knurhår' },
   { id:'lion3d',           label:'Løve 3D',      icon:'🦁', category:'animal',    description:'3D løvehoved-maske (fra foto) der bæres over ansigtet' },
-  { id:'horse2',           label:'Hest',         icon:'🐎', category:'animal',    description:'3D hestehoved der omkranser hele hovedet' },
   { id:'horse3',           label:'Hest 3D',      icon:'🐴', category:'animal',    description:'3D hestehoved fastgjort til hovedets pose — omslutter hele ansigtet' },
   // Makeup
   { id:'lip_red',          label:'Rød læbe',     icon:'💋', category:'makeup',   description:'Klassisk rød læbestift' },
   { id:'lip_pink',         label:'Pink læbe',    icon:'🌸', category:'makeup',   description:'Blød pink med glans' },
   { id:'lip_rainbow',      label:'Regnbue læbe', icon:'🌈', category:'makeup',   description:'Læbestift der skifter farve gennem hele farvespektret over tid' },
   { id:'iris_color',       label:'Iris-farve',   icon:'👁️', category:'makeup',   description:'Iris skifter farve gennem hele farvespektret over tid' },
-  { id:'eyeshadow_smoky',  label:'Smoky Eye',    icon:'🖤', category:'makeup',   description:'Blended sort øjenskygge' },
   // Character
   { id:'anon_mask',        label:'Anon Maske',    icon:'🎭', category:'character', description:'3D anonymous-maske' },
   { id:'anonymous_mask',   label:'Anonymous',     icon:'👤', category:'character', description:'3D Anonymous / Guy Fawkes-maske' },
@@ -64,6 +59,7 @@ export const FILTERS: FilterDefinition[] = [
   { id:'agf_cap',          label:'AGF Kasket',    icon:'🧢', category:'props',    description:'3D AGF-kasket ovenpå hovedet' },
   { id:'agf_cap_logo',     label:'AGF Kasket Logo', icon:'🧢', category:'props',  description:'Hvid kasket med AGF-byvåben på fronten' },
   { id:'agf_fan',          label:'AGF Fan',       icon:'🔴', category:'props',    description:'AGF-logo malet på begge kinder' },
+  { id:'man_utd',          label:'AGF/MUFC',      icon:'🔴', category:'props',    description:'AGF-logo til venstre og Manchester United til højre — du står foran' },
   { id:'denmark_fan',      label:'Danmark Fan',   icon:'🇩🇰', category:'props',    description:'Dansk flag-fodbold malet på begge kinder' },
   // Distortion (image warps)
   { id:'big_mouth',       label:'Stor Mund',    icon:'👄', category:'distortion', description:'Munden forstørres kraftigt' },

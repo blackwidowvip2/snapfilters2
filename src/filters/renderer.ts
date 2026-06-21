@@ -5,15 +5,13 @@ import {
   pxMeltFace, pxPencilSketch, pxKaleidoscope, pxBlack,
 } from './pixelFilters';
 import { drawDog }   from './animal/dog';
-import { drawCat }   from './animal/cat';
 import { drawBunny } from './animal/bunny';
-import { drawFox }   from './animal/fox';
-import { drawLion }  from './animal/lion';
-import { drawLipRed, drawLipPink, drawEyeshadowSmoky } from './makeup/index';
+import { drawLipRed, drawLipPink } from './makeup/index';
 import { drawLipRainbow } from './makeup/lipstickFilter';
 import { drawIrisColor } from './makeup/irisColor';
 import { drawClown } from './makeup/clownFilter';
 import { drawWildMan } from './character/wildManFilter';
+import { drawManUtdBackground } from './props/manUtdBackground';
 import { drawAgfFan } from './props/agfFan';
 import { drawDenmarkFan } from './props/denmarkFan';
 import { pxBigEyes, pxBigMouth, pxWideLips, pxAlienHead, pxVerticalScale, pxSlimFace, pxSwirlFace, pxSadMouth, pxPuffyFace, drawThirdEye } from './character/index';
@@ -29,8 +27,8 @@ import type { LandmarkList } from '../types';
 
 // Filters that skip pixel processing (canvas overlay only)
 const NO_PIXEL = new Set([
-  'none','dog','cat','bunny','fox','lion',
-  'lip_red','lip_pink','lip_rainbow','eyeshadow_smoky','eyeshadow_glam','full_glam','iris_color',
+  'none','dog','bunny',
+  'lip_red','lip_pink','lip_rainbow','eyeshadow_glam','full_glam','iris_color',
   'vampire','devil','angel','alien','alien_face',
   'third_eye','clown',
   // Three.js disguise prop — handled separately
@@ -47,6 +45,9 @@ export function applyPixelFilter(
   filterId: string,
   W: number, H: number, t: number,
 ) {
+  // Man Utd — full-frame 3D-crest background composited behind the person.
+  // Handled once per frame with direct canvas drawing (not the ImageData path).
+  if (filterId === 'man_utd') { drawManUtdBackground(ctx, W, H, t); return; }
   if (NO_PIXEL.has(filterId)) return;
   try {
     const id = ctx.getImageData(0, 0, W, H);
@@ -93,15 +94,11 @@ export function applyOverlayFilter(
   switch (filterId) {
     // Animal
     case 'dog':    d && drawDog(d);    break;
-    case 'cat':    d && drawCat(d);    break;
     case 'bunny':  d && drawBunny(d);  break;
-    case 'fox':    d && drawFox(d);    break;
-    case 'lion':   d && drawLion(d);   break;
     // Makeup
     case 'lip_red':         d && drawLipRed(d);         break;
     case 'lip_pink':        d && drawLipPink(d);        break;
     case 'lip_rainbow':     d && drawLipRainbow(d);     break;
-    case 'eyeshadow_smoky': d && drawEyeshadowSmoky(d); break;
     case 'iris_color':      d && drawIrisColor(d);      break;
     // Character
     case 'third_eye':     d && drawThirdEye(d);      break;
@@ -350,13 +347,20 @@ export function applyOverlayFilter(
         const apexL = d.pt(50), apexR = d.pt(280);       // cheek apples
         const faceW = Math.hypot(sideR.x - sideL.x, sideR.y - sideL.y);
         const faceCx = (sideL.x + sideR.x) / 2;
-        // One bump centred on each cheek apple, pushing the skin outward so the
-        // cheek widens. Radius covers the cheek but is kept small enough to fade
+        // Centre each bump on the cheek MEAT, biased outward toward the face
+        // side so its inner edge stays well clear of the nose. Sampling toward
+        // the face centre pushes the whole cheek outward → a rounder, fuller
+        // cheek. The lobe is wide enough to take in the entire cheek but fades
         // out before the eyes (above), nose (inward) and mouth (below).
-        const rx = faceW * 0.26, ry = faceW * 0.26, push = faceW * 0.14;
+        const cxL = apexL.x + (sideL.x - apexL.x) * 0.55;
+        const cxR = apexR.x + (sideR.x - apexR.x) * 0.55;
+        // Drop the centre below the cheekbone so the lobe's top edge stays well
+        // under the eyes; it then extends down over the full cheek toward the jaw.
+        const cyL = apexL.y + faceW * 0.12, cyR = apexR.y + faceW * 0.12;
+        const rx = faceW * 0.33, ry = faceW * 0.36, push = faceW * 0.19;
         const cheeks = [
-          { cx: apexL.x, cy: apexL.y, rx, ry, push, dirX: Math.sign(faceCx - apexL.x) },
-          { cx: apexR.x, cy: apexR.y, rx, ry, push, dirX: Math.sign(faceCx - apexR.x) },
+          { cx: cxL, cy: cyL, rx, ry, push, dirX: Math.sign(faceCx - cxL) },
+          { cx: cxR, cy: cyR, rx, ry, push, dirX: Math.sign(faceCx - cxR) },
         ];
         try {
           const id2 = ctx.getImageData(0, 0, W, H);

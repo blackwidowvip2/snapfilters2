@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { LandmarkList } from '../../types';
+import { getMaskTuning } from '../../lib/devTuning';
 
 // ════════════════════════════════════════════════════════════════════════
 //  Procedural 3D sunglasses — real geometry with depth:
@@ -641,8 +642,8 @@ export function updateEnclosingMask(backFrac = 0.3, scaleMul = 1) {
 //          └── Horse.glb (offset tuned inside, via createSunglassesFromGLB)
 //  This version auto-scales from the head SIZE (a blend of cheek-to-cheek width
 //  AND brow-to-chin height) so the head grows with both, and exposes tunable
-//  `backFrac` (pivot depth into the skull) and `scaleMul` (overall fit) so the
-//  experiment can be adjusted WITHOUT touching the working "Hest" (horse2).
+//  `backFrac` (pivot depth into the skull) and `scaleMul` (overall fit) for the
+//  "Hest 3D" (horse3) head-pose fit.
 // ════════════════════════════════════════════════════════════════════════
 // Reused scratch objects so the per-frame pose solve allocates nothing.
 const _L = new THREE.Vector3(), _R = new THREE.Vector3();
@@ -759,9 +760,14 @@ const _emTmp = new THREE.Vector3();
 
 function lionEyesLocal(
   prop: THREE.Object3D, eyeNx: number, eyeNy: number, eyeNz: number,
+  live = false,
 ): EyePair | null {
-  const cached = eyePairCache.get(prop);
-  if (cached) return cached;
+  // `live` (dev tuning) bypasses the per-prop cache so dragging the eyeN sliders
+  // recomputes the eye points every frame; production keeps the one-time scan.
+  if (!live) {
+    const cached = eyePairCache.get(prop);
+    if (cached) return cached;
+  }
 
   let mesh: THREE.Mesh | null = null;
   prop.traverse((o) => { if (!mesh && (o as THREE.Mesh).isMesh) mesh = o as THREE.Mesh; });
@@ -796,12 +802,25 @@ function lionEyesLocal(
   const R = toLocal(1 - eyeNx, eyeNy, eyeNz);
   const mid = new THREE.Vector3().addVectors(L, R).multiplyScalar(0.5);
   const pair: EyePair = { L, R, mid, sep: L.distanceTo(R) || 1 };
-  eyePairCache.set(prop, pair);
+  if (!live) eyePairCache.set(prop, pair);
   return pair;
 }
 
-export function updateEyeAnchoredMask(eyeNx = 0.42, eyeNy = 0.58, eyeNz = 0.85, scaleMul = 1) {
+export function updateEyeAnchoredMask(
+  eyeNx = 0.42, eyeNy = 0.58, eyeNz = 0.85, scaleMul = 1, tuningId?: string,
+) {
   return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
+    // Dev live tuning: when a panel registered this id, read the eye anchor +
+    // scale from the mutable store and re-drive the build rotation each frame
+    // (overriding the rotation baked at creation). No-op in production.
+    const tune = tuningId ? getMaskTuning(tuningId) : undefined;
+    if (tune) {
+      eyeNx = tune.eyeNx; eyeNy = tune.eyeNy; eyeNz = tune.eyeNz; scaleMul = tune.scaleMul;
+      const model = prop.children[0];
+      if (model) model.rotation.set(
+        tune.rotX * Math.PI / 180, tune.rotY * Math.PI / 180, tune.rotZ * Math.PI / 180,
+      );
+    }
     const pt = (idx: number) => ({
       x:  (1 - lm[idx].x) * W - W / 2,
       y: -(lm[idx].y * H - H / 2),
@@ -824,7 +843,7 @@ export function updateEyeAnchoredMask(eyeNx = 0.42, eyeNy = 0.58, eyeNz = 0.85, 
     const pitch = -(noseTip.y - eyeCy) / (eyeDist * 1.3);
     prop.rotation.set(pitch * 0.5, yaw * 0.55, roll);
 
-    const eyes = lionEyesLocal(prop, eyeNx, eyeNy, eyeNz);
+    const eyes = lionEyesLocal(prop, eyeNx, eyeNy, eyeNz, !!tune);
     if (!eyes) { prop.position.set(eyeMid.x, eyeMid.y, eyeMid.z); return; }
 
     // Scale so the model's eye separation matches the person's eye distance →
