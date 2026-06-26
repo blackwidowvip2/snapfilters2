@@ -6,11 +6,13 @@ import {
 } from './pixelFilters';
 import { drawDog }   from './animal/dog';
 import { drawBunny } from './animal/bunny';
+import { drawLion } from './animal/lionFilter';
 import { drawLipRed, drawLipPink } from './makeup/index';
 import { drawLipRainbow } from './makeup/lipstickFilter';
 import { drawIrisColor } from './makeup/irisColor';
 import { drawClown } from './makeup/clownFilter';
 import { drawWildMan } from './character/wildManFilter';
+import { drawAss } from './character/assFilter';
 import { drawManUtdBackground } from './props/manUtdBackground';
 import { drawAgfFan } from './props/agfFan';
 import { drawDenmarkFan } from './props/denmarkFan';
@@ -27,17 +29,18 @@ import type { LandmarkList } from '../types';
 
 // Filters that skip pixel processing (canvas overlay only)
 const NO_PIXEL = new Set([
-  'none','dog','bunny',
+  'none','dog','bunny','lion',
   'lip_red','lip_pink','lip_rainbow','eyeshadow_glam','full_glam','iris_color',
   'vampire','devil','angel','alien','alien_face',
   'third_eye','clown',
   // Three.js disguise prop — handled separately
-  'disguise','wild_man',
+  'disguise','wild_man','ass_face',
   'agf_fan','denmark_fan',
   'neon_outline',
   'gold',
   // Three.js props — handled separately
   'sunglasses','party_glasses','anon_mask','lion3d','anubis','triceratops',
+  'eyebrows',
 ]);
 
 export function applyPixelFilter(
@@ -95,6 +98,7 @@ export function applyOverlayFilter(
     // Animal
     case 'dog':    d && drawDog(d);    break;
     case 'bunny':  d && drawBunny(d);  break;
+    case 'lion':   d && drawLion(d);   break;
     // Makeup
     case 'lip_red':         d && drawLipRed(d);         break;
     case 'lip_pink':        d && drawLipPink(d);        break;
@@ -104,6 +108,7 @@ export function applyOverlayFilter(
     case 'third_eye':     d && drawThirdEye(d);      break;
     case 'clown':         d && drawClown(d);         break;
     case 'wild_man':      d && drawWildMan(d);       break;
+    case 'ass_face':      d && drawAss(d);           break;
     case 'agf_fan':       d && drawAgfFan(d);        break;
     case 'denmark_fan':   d && drawDenmarkFan(d);    break;
     case 'big_eyes': {

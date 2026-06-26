@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { applyPixelFilter, applyOverlayFilter } from '../filters/renderer';
 import { setWildManFaces } from '../filters/character/wildManFilter';
+import { setAssFaces } from '../filters/character/assFilter';
 
 export function useRender(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -53,6 +54,7 @@ export function useRender(
       // warp only rewrites its own face region, so multiple faces compose.
       if (faces.length > 0) {
         setWildManFaces(faces);   // let the wild-man filter split overlapping heads
+        setAssFaces(faces);       // same overlap-splitting for the røv filter
         for (const lm of faces) applyOverlayFilter(ctx, f, lm, W, H, t);
       } else {
         applyOverlayFilter(ctx, f, null, W, H, t);

@@ -70,7 +70,14 @@
       "Bash(node tools/shrink_groucho.mjs --render)",
       "Bash(node tools/build_dog2.mjs)",
       "Bash(node tools/view_tongue.mjs)",
-      "Bash(node tools/build_ski_goggles.mjs)"
+      "Bash(node tools/build_ski_goggles.mjs)",
+      "Bash(node tools/optimize_glb.mjs \"public/models/Pink_Neon_Ski_Goggles.glb\" \"public/models/Pink_Neon_Ski_Goggles_opt.glb\")",
+      "Bash(rm \"Pink_Neon_Ski_Goggles.glb\" \"Ski_goggles.glb\")",
+      "Bash(mv \"Pink_Neon_Ski_Goggles_opt.glb\" \"Pink_Neon_Ski_Goggles.glb\")",
+      "Bash(git checkout *)",
+      "PowerShell(npx tsc --noEmit)",
+      "Bash(git commit -m ' *)",
+      "Bash(node tools/_bbox_tmp.mjs public/models/Lion2.glb public/models/Bunny_ears_nose.glb)"
     ]
   }
 }

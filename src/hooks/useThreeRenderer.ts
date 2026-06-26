@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { useStore } from '../store/useStore';
 // createSunglasses() (procedural) is still available in ../filters/props/sunglasses
 // as a fallback if you ever want to render without the .glb asset.
-import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateEyeAnchoredMask, updateHeadTop, updateHorse3 } from '../filters/props/sunglasses';
+import { createSunglassesFromGLB, updateSunglasses, updateMask, updateBunnyEars, updateHeadOccluder, updateEyeMask, updateEyeAnchoredMask, updateHeadTop, updateHorse3, updateBrowMask } from '../filters/props/sunglasses';
 import { createClownNose, createClownHair, updateClownNose, updateClownHair } from '../filters/props/clown';
 import type { LandmarkList } from '../types';
 
@@ -147,6 +147,7 @@ const FILTER_PROPS: Record<string, string[]> = {
   lion3d:        ['lion3d'],
   anubis:        ['anubis'],
   triceratops:   ['triceratops'],
+  eyebrows:      ['eyebrows'],
 };
 
 export function useThreeRenderer(
@@ -250,6 +251,7 @@ export function useThreeRenderer(
       anubis:        `${import.meta.env.BASE_URL}models/AnubisHead.glb`,
       triceratops:   `${import.meta.env.BASE_URL}models/Triceratops.glb`,
       disguise:      `${import.meta.env.BASE_URL}models/Groucho_disguise.glb`,
+      eyebrows:      `${import.meta.env.BASE_URL}models/Eyelashes.glb`,
     };
     // Factory + face-tracking updater for every prop instance type.
     const makeProp: Record<string, () => THREE.Object3D> = {
@@ -317,6 +319,10 @@ export function useThreeRenderer(
       // eyes — like the normal glasses. 0.123 × creation scale (0.94·5.4/2 =
       // 2.538) ≈ 0.31.
       disguise:      () => createSunglassesFromGLB(urls.disguise, { fit: 0.94, pivotZFront: true, offset: { x: -0.2, y: -0.31 } }),
+      // Øjenbryn — Eyelashes.glb worn over the eyebrows. The model ships a grey
+      // baseColor (≈0.60 grey) with no texture, so force it solid black: eyebrows
+      // should read black regardless of the GLB's own colour.
+      eyebrows:      () => createSunglassesFromGLB(urls.eyebrows, { fit: 1.0, forceColor: 0x000000 }),
       clown_nose:    createClownNose,
       clown_hair:    createClownHair,
     };
@@ -354,6 +360,16 @@ export function useThreeRenderer(
       // bridge (so the two lens holes centre on the eyes) and the temple arms
       // stretched backward toward the ears.
       disguise:      (p, lm, W, H) => updateSunglasses(p, lm, W, H, { zStretch: 3 }),
+      // Anchored on the eyebrow line, scaled to the face, so the lashes sit over
+      // (and replace) the person's eyebrows.
+      // Modellen splittes i to pivoter (én pr. øje). Hver vippe løber fra øjets
+      // indre krog (mod næsen) ud til 20% ud over den ydre krog, langs øjets egen
+      // akse. Params: heightMul 0.45, liftBase 0.15 (hvilested), browGain 0 (vipperne
+      // er forankret til ØJET, ikke brynet — så de bliver på øjet når brynet løftes),
+      // outerExtend 0.4 (40% forbi ydre krog), curl 0 (i hvile peger vipperne op ad
+      // y-aksen), thickness 0.01 (z = 1% af højden), curlGain 2.4 (øjenLUKNING flikker
+      // vipperne ud af z VÆK fra personen (mod kameraet).
+      eyebrows:      updateBrowMask(0.45, 0.15, 0, 0.4, 0, 0.01, -2.4),
       clown_nose:    updateClownNose,
       clown_hair:    updateClownHair,
     };

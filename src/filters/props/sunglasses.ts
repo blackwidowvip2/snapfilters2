@@ -863,6 +863,211 @@ export function updateEyeAnchoredMask(
 }
 
 // ════════════════════════════════════════════════════════════════════════
+//  Eyebrow / lash overlay — sits a TWO-cluster model (e.g. a pair of lashes)
+//  over the person's eyes so EACH cluster centres on a PUPIL. Unlike a uniform
+//  face-width scale (which shrinks the gap between the clusters toward the nose),
+//  this measures the model's own left/right cluster separation once and scales
+//  so it matches the person's pupil distance — so the centre of each cluster
+//  lands on the same x-axis as that eye's pupil at any head size. `scaleMul`
+//  fine-tunes overall size; `bias` nudges it up (+) / down (−) along the head-up
+//  axis as a fraction of face height (e.g. to drop it onto the lash line).
+// ════════════════════════════════════════════════════════════════════════
+type LashPivot = { group: THREE.Group; minX: number; maxX: number; halfH: number };
+type LashPivots = { L: LashPivot; R: LashPivot };
+const lashPivotCache = new WeakMap<THREE.Object3D, LashPivots>();
+
+// Split the loaded lash mesh into TWO independent child pivots (left / right
+// cluster, partitioned at the model's mid-x), each recentred on its own centroid
+// so the pivot rotates/scales about that lash's centre. Returns null until the
+// GLB has streamed in. The two halves can then be placed on the two eyes
+// independently — each following its own eye's slant/curve and eyebrow.
+function buildLashPivots(prop: THREE.Object3D): LashPivots | null {
+  const cached = lashPivotCache.get(prop);
+  if (cached) return cached;
+
+  let mesh: THREE.Mesh | null = null;
+  prop.traverse((o) => { if (!mesh && (o as THREE.Mesh).isMesh) mesh = o as THREE.Mesh; });
+  if (!mesh) return null;
+  const m = mesh as THREE.Mesh;
+  if (!m.geometry) return null;
+
+  // Bake the mesh's transform (relative to the prop root) into a non-indexed copy
+  // so the geometry axes line up with root/screen space (x = left↔right) and each
+  // run of 3 vertices is one triangle.
+  prop.updateWorldMatrix(true, true);
+  const toRoot = new THREE.Matrix4().copy(prop.matrixWorld).invert().multiply(m.matrixWorld);
+  const src = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone());
+  src.applyMatrix4(toRoot);
+  src.computeBoundingBox();
+  const midX = (src.boundingBox!.min.x + src.boundingBox!.max.x) / 2;
+
+  const pos = src.attributes.position as THREE.BufferAttribute;
+  const nrm = src.attributes.normal as THREE.BufferAttribute | undefined;
+  type Bucket = { p: number[]; n: number[]; cx: number; cy: number; cz: number; c: number };
+  const mk = (): Bucket => ({ p: [], n: [], cx: 0, cy: 0, cz: 0, c: 0 });
+  const bl = mk(), br = mk();
+  for (let t = 0; t < pos.count; t += 3) {
+    const avgX = (pos.getX(t) + pos.getX(t + 1) + pos.getX(t + 2)) / 3;
+    const dst = avgX < midX ? bl : br;
+    for (let k = 0; k < 3; k++) {
+      const i = t + k;
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      dst.p.push(x, y, z);
+      if (nrm) dst.n.push(nrm.getX(i), nrm.getY(i), nrm.getZ(i));
+      dst.cx += x; dst.cy += y; dst.cz += z; dst.c++;
+    }
+  }
+  if (!bl.c || !br.c) return null;
+
+  const buildPivot = (b: Bucket): LashPivot => {
+    const ox = b.cx / b.c, oy = b.cy / b.c, oz = b.cz / b.c;   // centroid → origin
+    const arr = new Float32Array(b.p.length);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < b.p.length; i += 3) {
+      const X = b.p[i] - ox, Y = b.p[i + 1] - oy, Z = b.p[i + 2] - oz;
+      arr[i] = X; arr[i + 1] = Y; arr[i + 2] = Z;
+      if (X < minX) minX = X; if (X > maxX) maxX = X;
+      if (Y < minY) minY = Y; if (Y > maxY) maxY = Y;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    if (b.n.length) geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(b.n), 3));
+    else geo.computeVertexNormals();
+    // Matte black — no metalness / minimal env reflection so the lashes read as
+    // solid black instead of the shiny grey the forced metal material gave.
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x000000, roughness: 0.9, metalness: 0.0, envMapIntensity: 0.2,
+    });
+    const lashMesh = new THREE.Mesh(geo, mat);
+    const group = new THREE.Group();
+    group.add(lashMesh);
+    prop.add(group);
+    return { group, minX, maxX, halfH: (maxY - minY) / 2 || 1 };
+  };
+
+  const pivots: LashPivots = { L: buildPivot(bl), R: buildPivot(br) };
+  m.visible = false;   // hide the original combined mesh
+  lashPivotCache.set(prop, pivots);
+  return pivots;
+}
+
+// One eye's landmarks gathered for placing a lash on it.
+type EyeDesc = {
+  pupil: { x: number; y: number; z: number };
+  inner: { x: number; y: number };   // corner toward the nose
+  outer: { x: number; y: number };   // corner away from the nose
+  brow: { x: number; y: number };
+  upper: { x: number; y: number };   // upper eyelid
+  lower: { x: number; y: number };   // lower eyelid
+};
+
+const _lashAxisX = new THREE.Vector3(1, 0, 0);
+const _lashAxisZ = new THREE.Vector3(0, 0, 1);
+const _qCurl = new THREE.Quaternion();
+const _qSlant = new THREE.Quaternion();
+
+export function updateBrowMask(
+  heightMul = 0.45, liftBase = 0.05, browGain = 1, outerExtend = 0.4,
+  curl = 0.5, thickness = 0.01, curlGain = 4,
+) {
+  return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
+    const pt = (idx: number) => ({
+      x:  (1 - lm[idx].x) * W - W / 2,
+      y: -(lm[idx].y * H - H / 2),
+      z: -(lm[idx].z ?? 0) * W,
+    });
+
+    // Head-up axis (chin → forehead): the direction lashes rise on a brow raise.
+    const top = pt(10), chin = pt(152);
+    const faceHeight = Math.hypot(top.x - chin.x, top.y - chin.y) || 1;
+    const ux = (top.x - chin.x) / faceHeight, uy = (top.y - chin.y) / faceHeight;
+
+    const hasIris = lm.length > 473;
+    // Build one eye descriptor: pupil centre (iris when available, else corner
+    // midpoint), the inner/outer corners, and the brow centre.
+    const eye = (
+      outerI: number, innerI: number, browI: number, irisI: number, upperI: number, lowerI: number,
+    ): EyeDesc => {
+      const outer = pt(outerI), inner = pt(innerI);
+      const pupil = hasIris ? pt(irisI)
+        : { x: (outer.x + inner.x) / 2, y: (outer.y + inner.y) / 2, z: (outer.z + inner.z) / 2 };
+      return { pupil, inner, outer, brow: pt(browI), upper: pt(upperI), lower: pt(lowerI) };
+    };
+    const e1 = eye(33, 133, 105, 468, 159, 145);
+    const e2 = eye(263, 362, 334, 473, 386, 374);
+    // Screen-left eye pairs with the model's left lash cluster.
+    const eyeL = e1.pupil.x <= e2.pupil.x ? e1 : e2;
+    const eyeR = e1.pupil.x <= e2.pupil.x ? e2 : e1;
+
+    const pivots = buildLashPivots(prop);
+    if (!pivots) return;   // GLB still streaming in
+
+    const place = (pivot: LashPivot, d: EyeDesc) => {
+      const eyeWidth = Math.hypot(d.outer.x - d.inner.x, d.outer.y - d.inner.y) || 1;
+      // The lash runs from the INNER corner (eye's start, toward the nose) out to
+      // `outerExtend` (20%) BEYOND the outer corner, along the eye's own axis — so
+      // it follows that eye's slant/curve.
+      const dirx = (d.outer.x - d.inner.x) / eyeWidth, diry = (d.outer.y - d.inner.y) / eyeWidth;
+      const outerExt = {
+        x: d.outer.x + dirx * outerExtend * eyeWidth,
+        y: d.outer.y + diry * outerExtend * eyeWidth,
+      };
+
+      // Brow raise: up-axis gap between pupil and brow. We subtract a NEUTRAL gap
+      // (a typical resting brow↔pupil distance, as a fraction of eye width) so the
+      // lash sits on the lash line at rest (`liftBase`) and the brow's ACTUAL raise
+      // drives the motion (× `browGain`) — so the lashes clearly rise when the
+      // person raises their eyebrows instead of barely budging.
+      const NEUTRAL_GAP = 0.70;   // resting brow↔pupil gap ≈ 0.70 × eye width
+      const gap = (d.brow.x - d.pupil.x) * ux + (d.brow.y - d.pupil.y) * uy;
+      const raise = gap - eyeWidth * NEUTRAL_GAP;        // ~0 at rest, >0 when raised
+      const lift = eyeWidth * liftBase + raise * browGain;
+      const lx = ux * lift, ly = uy * lift;
+
+      // Eye closure: the lid gap (upper↔lower) normalised by eye width. Open ≈ 0.28,
+      // closed ≈ 0. `closeAmount` ramps 0 (open) → 1 (shut). Closing the eyes is what
+      // flicks the lashes out of the z-plane toward the camera (below), so a brow
+      // raise only lifts them up the y-axis and never tips them inward.
+      const OPEN_REF = 0.28;
+      const lidGap = Math.hypot(d.upper.x - d.lower.x, d.upper.y - d.lower.y);
+      const closeAmount = Math.min(1, Math.max(0, 1 - (lidGap / eyeWidth) / OPEN_REF));
+      const wInner = { x: d.inner.x + lx, y: d.inner.y + ly };
+      const wOuter = { x: outerExt.x + lx, y: outerExt.y + ly };
+
+      // Map the lash's local x-span onto the inner→outer world segment. Pick the
+      // screen-left end (smaller x) for the local minX so the lash isn't flipped.
+      const wLeft  = wInner.x <= wOuter.x ? wInner : wOuter;
+      const wRight = wInner.x <= wOuter.x ? wOuter : wInner;
+      const segLen = Math.hypot(wRight.x - wLeft.x, wRight.y - wLeft.y) || 1;
+      const angle = Math.atan2(wRight.y - wLeft.y, wRight.x - wLeft.x);
+
+      const span = (pivot.maxX - pivot.minX) || 1;
+      const scX = segLen / span;
+      const scY = (eyeWidth * heightMul) / (2 * pivot.halfH);
+      // Rotation = slant about Z, composed with a CURL about the lash's own long
+      // axis (local X) that tips the lash body forward toward the camera (+Z), so
+      // the lashes flick outward at the viewer. The endpoints lie on the X axis,
+      // so the curl leaves them anchored in the eye corners. At rest (`curl` = 0)
+      // the lash stands up the y-axis; CLOSING the eyes (`closeAmount`) flicks it
+      // out of the z-plane toward the camera (× `curlGain`).
+      const curlAngle = curl + closeAmount * curlGain;
+      _qCurl.setFromAxisAngle(_lashAxisX, curlAngle);
+      _qSlant.setFromAxisAngle(_lashAxisZ, angle);
+      pivot.group.quaternion.copy(_qSlant).multiply(_qCurl);
+      // Z (depth) is flattened to `thickness` of the height so the lashes are a
+      // thin curled sheet instead of a thick slab.
+      pivot.group.scale.set(scX, scY, scY * thickness);
+      // pos so local minX end lands on wLeft: world(minX) = pos + Rz·(scX·minX,0).
+      const ca = Math.cos(angle), sa = Math.sin(angle);
+      const offx = scX * pivot.minX * ca, offy = scX * pivot.minX * sa;
+      pivot.group.position.set(wLeft.x - offx, wLeft.y - offy, d.pupil.z + faceHeight * 0.05);
+    };
+    place(pivots.L, eyeL);
+    place(pivots.R, eyeR);
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════
 //  Mustache — anchored on the philtrum (between the nose base and the upper
 //  lip) so it sits under the nose and tracks head roll/yaw/pitch. `scaleMul`
 //  sizes it relative to the face; `bias` nudges it up (+) / down (−) along the

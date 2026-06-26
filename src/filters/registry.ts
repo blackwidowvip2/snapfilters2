@@ -16,6 +16,7 @@ export const FILTERS: FilterDefinition[] = [
   { id:'dog',              label:'Hund',        icon:'🐶', category:'animal',    description:'Hunde-ører, næse og tunge' },
   { id:'dog2',             label:'Hund 2',       icon:'🐕', category:'animal',    description:'3D malet hundeansigt' },
   { id:'bunny',            label:'Kanin',        icon:'🐰', category:'animal',    description:'Lange ører og lyserød næse' },
+  { id:'lion',             label:'Løve',         icon:'🦁', category:'animal',    description:'Løveører foroven og næse/mule forankret på næsen' },
   { id:'lion3d',           label:'Løve 3D',      icon:'🦁', category:'animal',    description:'3D løvehoved-maske (fra foto) der bæres over ansigtet' },
   { id:'horse3',           label:'Hest 3D',      icon:'🐴', category:'animal',    description:'3D hestehoved fastgjort til hovedets pose — omslutter hele ansigtet' },
   // Makeup
@@ -23,6 +24,7 @@ export const FILTERS: FilterDefinition[] = [
   { id:'lip_pink',         label:'Pink læbe',    icon:'🌸', category:'makeup',   description:'Blød pink med glans' },
   { id:'lip_rainbow',      label:'Regnbue læbe', icon:'🌈', category:'makeup',   description:'Læbestift der skifter farve gennem hele farvespektret over tid' },
   { id:'iris_color',       label:'Iris-farve',   icon:'👁️', category:'makeup',   description:'Iris skifter farve gennem hele farvespektret over tid' },
+  { id:'eyebrows',        label:'Øjenbryn',      icon:'icons/eyelash.svg', category:'makeup',   description:'3D øjenbryn der lægger sig over og erstatter dine egne (sorte)' },
   // Character
   { id:'anon_mask',        label:'Anon Maske',    icon:'🎭', category:'character', description:'3D anonymous-maske' },
   { id:'anonymous_mask',   label:'Anonymous',     icon:'👤', category:'character', description:'3D Anonymous / Guy Fawkes-maske' },
@@ -32,6 +34,7 @@ export const FILTERS: FilterDefinition[] = [
   { id:'clown',           label:'Klovn',        icon:'🤡', category:'character', description:'Hvidt ansigt, røde kinder, stor rød mund, 3D-næse og krøllet regnbuehår' },
   { id:'disguise',        label:'Forklædning',  icon:'🥸', category:'character', description:'Groucho-forklædning: briller, store øjenbryn, stor næse og overskæg' },
   { id:'wild_man',        label:'Vild Mand',    icon:'🤪', category:'character', description:'Farverig galning med vildt hår — dine egne øjne skinner igennem' },
+  { id:'ass_face',        label:'Røv',          icon:'🍑', category:'character', description:'Røv-ansigt lagt over hovedet — dine egne øjne skinner igennem de to øjenhuller' },
   { id:'anubis',          label:'Anubis',        icon:'🐺', category:'character', description:'3D Anubis-hoved (egyptisk sjakalgud) båret som maske' },
   { id:'triceratops',     label:'Triceratops',   icon:'🦕', category:'character', description:'3D Triceratops-hoved båret som maske' },
   // Style

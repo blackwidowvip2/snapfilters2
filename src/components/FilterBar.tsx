@@ -39,7 +39,11 @@ export const FilterBar: React.FC = () => {
             onClick={() => setFilter(f.id)}
             title={f.description}
           >
-            <span className={styles.filterIcon}>{f.icon}</span>
+            <span className={styles.filterIcon}>
+              {/^\/|\.(svg|png|jpe?g|webp|gif)$/i.test(f.icon)
+                ? <img src={`${import.meta.env.BASE_URL}${f.icon.replace(/^\//, '')}`} alt="" className={styles.filterIconImg} />
+                : f.icon}
+            </span>
             <span className={styles.filterLabel}>{f.label}</span>
           </button>
         ))}
