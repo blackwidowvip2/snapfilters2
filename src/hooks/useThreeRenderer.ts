@@ -148,6 +148,7 @@ const FILTER_PROPS: Record<string, string[]> = {
   anubis:        ['anubis'],
   triceratops:   ['triceratops'],
   eyebrows:      ['eyebrows'],
+  lip_lashes:    ['eyebrows'],
 };
 
 export function useThreeRenderer(
@@ -367,9 +368,13 @@ export function useThreeRenderer(
       // akse. Params: heightMul 0.45, liftBase 0.15 (hvilested), browGain 0 (vipperne
       // er forankret til ØJET, ikke brynet — så de bliver på øjet når brynet løftes),
       // outerExtend 0.4 (40% forbi ydre krog), curl 0 (i hvile peger vipperne op ad
-      // y-aksen), thickness 0.01 (z = 1% af højden), curlGain 2.4 (øjenLUKNING flikker
-      // vipperne ud af z VÆK fra personen (mod kameraet).
-      eyebrows:      updateBrowMask(0.45, 0.15, 0, 0.4, 0, 0.01, -2.4),
+      // thickness 0.01 (z = 1% af højden). liftBase 0.22 = lidt højere hvilested.
+      // curl 0.35 rad ≈ 20° = i hvile peger vipperne skråt VÆK fra personen. curlGain
+      // 1.85 = ved fuld øjenlukning når vinklen ~2.2 rad (~126°) → vipperne peger
+      // skråt NEDAD (mod kameraet), så de følger låget hele vejen ned. lidFollow
+      // 0.8 = vippelinjen dykker ned med øvre øjenlåg når øjet lukkes (bevarer åben-
+      // placeringen — drop = 0 ved fuldt åbent øje).
+      eyebrows:      updateBrowMask(0.45, 0.22, 0, 0.4, 0.35, 0.01, 1.85, 0, 0.8),
       clown_nose:    updateClownNose,
       clown_hair:    updateClownHair,
     };

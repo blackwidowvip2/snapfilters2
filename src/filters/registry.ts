@@ -25,9 +25,11 @@ export const FILTERS: FilterDefinition[] = [
   { id:'lip_rainbow',      label:'Regnbue læbe', icon:'🌈', category:'makeup',   description:'Læbestift der skifter farve gennem hele farvespektret over tid' },
   { id:'iris_color',       label:'Iris-farve',   icon:'👁️', category:'makeup',   description:'Iris skifter farve gennem hele farvespektret over tid' },
   { id:'eyebrows',        label:'Øjenbryn',      icon:'icons/eyelash.svg', category:'makeup',   description:'3D øjenbryn der lægger sig over og erstatter dine egne (sorte)' },
+  { id:'lip_lashes',      label:'Læbe + Vipper', icon:'💄', category:'makeup',   description:'Rød læbestift kombineret med 3D-øjenvipper' },
   // Character
   { id:'anon_mask',        label:'Anon Maske',    icon:'🎭', category:'character', description:'3D anonymous-maske' },
   { id:'anonymous_mask',   label:'Anonymous',     icon:'👤', category:'character', description:'3D Anonymous / Guy Fawkes-maske' },
+  { id:'scream',          label:'Scream',       icon:'😱', category:'character', description:'Ghostface-maske fra Scream lagt over ansigtet og justeret efter øjnene' },
   { id:'batman2',         label:'Batman',       icon:'🦇', category:'character', description:'3D Batman-cowl' },
   { id:'ironman',          label:'Iron Man',      icon:'🤖', category:'character', description:'3D Iron Man-hjelm' },
   { id:'third_eye',       label:'Tredje Øje',   icon:'👁️', category:'character', description:'Mystisk lilla øje åbner sig på panden' },

@@ -13,6 +13,7 @@ import { drawIrisColor } from './makeup/irisColor';
 import { drawClown } from './makeup/clownFilter';
 import { drawWildMan } from './character/wildManFilter';
 import { drawAss } from './character/assFilter';
+import { drawScream } from './character/screamFilter';
 import { drawManUtdBackground } from './props/manUtdBackground';
 import { drawAgfFan } from './props/agfFan';
 import { drawDenmarkFan } from './props/denmarkFan';
@@ -30,11 +31,11 @@ import type { LandmarkList } from '../types';
 // Filters that skip pixel processing (canvas overlay only)
 const NO_PIXEL = new Set([
   'none','dog','bunny','lion',
-  'lip_red','lip_pink','lip_rainbow','eyeshadow_glam','full_glam','iris_color',
+  'lip_red','lip_pink','lip_rainbow','lip_lashes','eyeshadow_glam','full_glam','iris_color',
   'vampire','devil','angel','alien','alien_face',
   'third_eye','clown',
   // Three.js disguise prop — handled separately
-  'disguise','wild_man','ass_face',
+  'disguise','wild_man','ass_face','scream',
   'agf_fan','denmark_fan',
   'neon_outline',
   'gold',
@@ -101,6 +102,9 @@ export function applyOverlayFilter(
     case 'lion':   d && drawLion(d);   break;
     // Makeup
     case 'lip_red':         d && drawLipRed(d);         break;
+    // Combined: red lipstick (2D) + the 3D eyelashes (drawn on the Three.js layer
+    // via FILTER_PROPS — see useThreeRenderer). Here we only add the lip.
+    case 'lip_lashes':      d && drawLipRed(d);         break;
     case 'lip_pink':        d && drawLipPink(d);        break;
     case 'lip_rainbow':     d && drawLipRainbow(d);     break;
     case 'iris_color':      d && drawIrisColor(d);      break;
@@ -109,6 +113,7 @@ export function applyOverlayFilter(
     case 'clown':         d && drawClown(d);         break;
     case 'wild_man':      d && drawWildMan(d);       break;
     case 'ass_face':      d && drawAss(d);           break;
+    case 'scream':        d && drawScream(d);        break;
     case 'agf_fan':       d && drawAgfFan(d);        break;
     case 'denmark_fan':   d && drawDenmarkFan(d);    break;
     case 'big_eyes': {
@@ -235,15 +240,20 @@ export function applyOverlayFilter(
       // push the warp centre slightly outward from the face centre to land on them.
       if (d) {
         const fc = d.faceCenter();
-        const earR = d.pt(234), earL = d.pt(454);
         const out = (p: { x: number; y: number }) => ({
           x: fc.x + (p.x - fc.x) * 1.18,
           y: fc.y + (p.y - fc.y) * 1.05,
         });
+        const cR = out(d.pt(234)), cL = out(d.pt(454));
+        // Cap the warp radius so neither ear's circle crosses the face midline —
+        // otherwise one ear's magnification reaches over the nose and drags that
+        // side's content onto the opposite cheek.
+        const half = Math.min(Math.abs(cR.x - fc.x), Math.abs(cL.x - fc.x));
+        const radius = Math.min(d.s * 1.16, half * 0.9);
         try {
           const id2 = ctx.getImageData(0, 0, W, H);
           const warped = pxBigEyes(id2.data, W, H,
-            [out(earR), out(earL)], d.s * 1.16, 3.0,
+            [cR, cL], radius, 3.0,
           );
           ctx.putImageData(warped, 0, 0);
         } catch (_) { /* taint guard */ }

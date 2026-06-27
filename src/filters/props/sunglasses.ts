@@ -872,7 +872,10 @@ export function updateEyeAnchoredMask(
 //  fine-tunes overall size; `bias` nudges it up (+) / down (−) along the head-up
 //  axis as a fraction of face height (e.g. to drop it onto the lash line).
 // ════════════════════════════════════════════════════════════════════════
-type LashPivot = { group: THREE.Group; minX: number; maxX: number; halfH: number };
+type LashPivot = {
+  group: THREE.Group; minX: number; maxX: number; halfH: number;
+  maxRatio: number; minRatio: number;
+};
 type LashPivots = { L: LashPivot; R: LashPivot };
 const lashPivotCache = new WeakMap<THREE.Object3D, LashPivots>();
 
@@ -933,16 +936,18 @@ function buildLashPivots(prop: THREE.Object3D): LashPivots | null {
     geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
     if (b.n.length) geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(b.n), 3));
     else geo.computeVertexNormals();
-    // Matte black — no metalness / minimal env reflection so the lashes read as
-    // solid black instead of the shiny grey the forced metal material gave.
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x000000, roughness: 0.9, metalness: 0.0, envMapIntensity: 0.2,
-    });
+    // Pure black, UNLIT — a basic material ignores scene lights, the environment
+    // map and specular highlights entirely, so the lashes are solid black instead
+    // of the dark grey a lit (standard) material showed.
+    const mat = new THREE.MeshBasicMaterial({ color: 0x000000 });
     const lashMesh = new THREE.Mesh(geo, mat);
     const group = new THREE.Group();
     group.add(lashMesh);
     prop.add(group);
-    return { group, minX, maxX, halfH: (maxY - minY) / 2 || 1 };
+    return {
+      group, minX, maxX, halfH: (maxY - minY) / 2 || 1,
+      maxRatio: 0, minRatio: Number.POSITIVE_INFINITY,
+    };
   };
 
   const pivots: LashPivots = { L: buildPivot(bl), R: buildPivot(br) };
@@ -968,7 +973,7 @@ const _qSlant = new THREE.Quaternion();
 
 export function updateBrowMask(
   heightMul = 0.45, liftBase = 0.05, browGain = 1, outerExtend = 0.4,
-  curl = 0.5, thickness = 0.01, curlGain = 4,
+  curl = 0.35, thickness = 0.01, curlGain = 1, blinkGrow = 0, lidFollow = 0,
 ) {
   return (prop: THREE.Object3D, lm: LandmarkList, W: number, H: number): void => {
     const pt = (idx: number) => ({
@@ -1013,24 +1018,32 @@ export function updateBrowMask(
         y: d.outer.y + diry * outerExtend * eyeWidth,
       };
 
-      // Brow raise: up-axis gap between pupil and brow. We subtract a NEUTRAL gap
-      // (a typical resting brow↔pupil distance, as a fraction of eye width) so the
-      // lash sits on the lash line at rest (`liftBase`) and the brow's ACTUAL raise
-      // drives the motion (× `browGain`) — so the lashes clearly rise when the
-      // person raises their eyebrows instead of barely budging.
-      const NEUTRAL_GAP = 0.70;   // resting brow↔pupil gap ≈ 0.70 × eye width
-      const gap = (d.brow.x - d.pupil.x) * ux + (d.brow.y - d.pupil.y) * uy;
-      const raise = gap - eyeWidth * NEUTRAL_GAP;        // ~0 at rest, >0 when raised
-      const lift = eyeWidth * liftBase + raise * browGain;
+      // Eye closure, AUTO-CALIBRATED. A fixed open-eye threshold is unreliable (it
+      // varies per person/camera), which left the closure signal nearly constant.
+      // Instead we track each eye's OWN open (max) and closed (min) lid gap — both
+      // slowly drifting back toward the live value so they re-calibrate — and
+      // measure closure across that full range. closeAmount spans 0→1 over a blink.
+      const lidGap = Math.hypot(d.upper.x - d.lower.x, d.upper.y - d.lower.y);
+      const ratio = lidGap / eyeWidth;
+      pivot.maxRatio = Math.max(pivot.maxRatio * 0.997, ratio);              // open baseline
+      pivot.minRatio = Number.isFinite(pivot.minRatio)
+        ? Math.min(pivot.minRatio / 0.997, ratio)                            // closed baseline
+        : ratio;
+      const range = pivot.maxRatio - pivot.minRatio;
+      const closeAmount = range > 1e-4
+        ? Math.min(1, Math.max(0, (pivot.maxRatio - ratio) / range))
+        : 0;
+
+      // Vertical placement: a resting lift above the eye, MINUS how far the upper
+      // lid has dropped from its OPEN baseline — so the lashes follow the eyelid
+      // DOWN as the eye closes instead of staying up at the (barely-moving) corner
+      // height. At the open baseline the drop is 0, so the correct open placement
+      // is preserved. `browGain` adds an optional brow-raise lift on top.
+      const raise = (d.brow.x - d.pupil.x) * ux + (d.brow.y - d.pupil.y) * uy - eyeWidth * 0.70;
+      const lidDrop = Math.max(0, pivot.maxRatio - ratio) * eyeWidth * lidFollow;
+      const lift = eyeWidth * liftBase + raise * browGain - lidDrop;
       const lx = ux * lift, ly = uy * lift;
 
-      // Eye closure: the lid gap (upper↔lower) normalised by eye width. Open ≈ 0.28,
-      // closed ≈ 0. `closeAmount` ramps 0 (open) → 1 (shut). Closing the eyes is what
-      // flicks the lashes out of the z-plane toward the camera (below), so a brow
-      // raise only lifts them up the y-axis and never tips them inward.
-      const OPEN_REF = 0.28;
-      const lidGap = Math.hypot(d.upper.x - d.lower.x, d.upper.y - d.lower.y);
-      const closeAmount = Math.min(1, Math.max(0, 1 - (lidGap / eyeWidth) / OPEN_REF));
       const wInner = { x: d.inner.x + lx, y: d.inner.y + ly };
       const wOuter = { x: outerExt.x + lx, y: outerExt.y + ly };
 
@@ -1043,7 +1056,11 @@ export function updateBrowMask(
 
       const span = (pivot.maxX - pivot.minX) || 1;
       const scX = segLen / span;
-      const scY = (eyeWidth * heightMul) / (2 * pivot.halfH);
+      // On a BLINK the lashes grow taller (× `blinkGrow`) so the motion is clearly
+      // visible head-on — a forward curl alone just turns the flat sheet edge-on
+      // (foreshortened) and reads as the lashes shrinking, not flicking.
+      const grow = 1 + closeAmount * blinkGrow;
+      const scY = ((eyeWidth * heightMul) / (2 * pivot.halfH)) * grow;
       // Rotation = slant about Z, composed with a CURL about the lash's own long
       // axis (local X) that tips the lash body forward toward the camera (+Z), so
       // the lashes flick outward at the viewer. The endpoints lie on the X axis,
